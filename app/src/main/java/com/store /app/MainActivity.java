@@ -411,6 +411,9 @@ public class MainActivity extends AppCompatActivity {
                             visualStateReady = true;
                             webViewRevealed = true;
 
+                            splashPageFinished = true;
+                            splashVisualStateReady = true;
+
                             // 👑 مزامنة خفية بعد الاستعادة (بدون لمس الأيقونات مباشرة)
                             SystemUI.syncStatusBarWithWebEarly(
                                     MainActivity.this,
@@ -457,6 +460,9 @@ public class MainActivity extends AppCompatActivity {
                             visualStateReady = true;
                             webViewRevealed = true;
 
+                            splashPageFinished = true;
+                            splashVisualStateReady = true;
+
                             // 👑 مزامنة خفية بعد الإحياء
                             SystemUI.syncStatusBarWithWebEarly(
                                     MainActivity.this,
@@ -495,6 +501,13 @@ public class MainActivity extends AppCompatActivity {
 
                             visualStateReady = true;
                             webViewRevealed = true;
+
+                            /*
+                             * Do not release the Android Splash here.
+                             * Splash release is controlled only by:
+                             * onPageFinished -> notifyPageFinishedForSplash()
+                             * -> VisualStateCallback.
+                             */
 
                             Log.i(
                                     TAG,
@@ -986,4 +999,4 @@ public class MainActivity extends AppCompatActivity {
             Log.e(TAG, "⚠️ Failed to initialize Native Modules.", t);
         }
     }
-    }
+                                }
