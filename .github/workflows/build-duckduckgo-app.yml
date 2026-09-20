@@ -1,0 +1,80 @@
+name: Build DuckDuckGo Engine Production Release APK
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. سحب مستودع DuckDuckGo مع جلب ملفات C++ الفرعية
+      - name: Checkout DuckDuckGo Android Repository
+        uses: actions/checkout@v4
+        with:
+          repository: 'duckduckgo/android'
+          ref: 'main'
+          submodules: 'recursive'
+
+      # 2. إعداد بيئة Java 21
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      # 3. إعداد بيئة الضغط وتفعيل R8
+      - name: Prepare Build Environment & Optimize Size
+        run: |
+          touch local.properties
+          echo "sdk.dir=$ANDROID_HOME" >> local.properties
+          
+          # تخصيص الذاكرة وتفعيل الوضع الكامل لأداة R8
+          echo "org.gradle.jvmargs=-Xmx6144m -XX:+UseG1GC" >> gradle.properties
+          echo "org.gradle.daemon=false" >> gradle.properties
+          echo "android.useAndroidX=true" >> gradle.properties
+          echo "android.enableR8.fullMode=true" >> gradle.properties
+
+      # 4. إعطاء صلاحيات التشغيل
+      - name: Grant Execute Permission
+        run: chmod +x gradlew
+
+      # 5. تجميع نسخة Release المصغرة (معمارية arm64-v8a واستخدام الخط الافتراضي)
+      - name: Build Optimized Release APK
+        run: |
+          ./gradlew :app:assembleRelease \
+            -x test \
+            -x lint \
+            -Pandroid.injected.build.abi=arm64-v8a \
+            -PuseProprietaryFont=false \
+            --no-daemon
+
+      # 6. توقيع ومحاذاة الـ APK بأدوات Android SDK الرسمية (بحث ديناميكي شامل)
+      - name: Sign & ZipAlign APK (Native Android Tools)
+        run: |
+          # 1. إنشاء مفتاح توقيع مؤقت معتمد
+          keytool -genkey -v -keystore release.keystore -alias androidkey -keyalg RSA -keysize 2048 -validity 10000 -storepass android -keypass android -dname "CN=Android,OU=Dev,O=App,L=City,S=State,C=US"
+          
+          # 2. البحث الديناميكي عن أي ملف APK تم إنتاجه في المشروع
+          RAW_APK=$(find . -type f -name "*.apk" ! -name "*aligned*" ! -name "*signed*" | head -n 1)
+          
+          echo "تم العثور على ملف الـ APK في المسار: $RAW_APK"
+          
+          if [ -z "$RAW_APK" ]; then
+            echo "خطأ: لم يتم العثور على أي ملف APK مجمع!"
+            exit 1
+          fi
+          
+          # 3. تحديد مسار أدوات Android Build-Tools
+          BUILD_TOOLS_DIR=$(ls -d $ANDROID_HOME/build-tools/* | tail -n 1)
+          
+          # 4. محاذاة وتوقيع الملف
+          $BUILD_TOOLS_DIR/zipalign -v 4 "$RAW_APK" aligned-app.apk
+          $BUILD_TOOLS_DIR/apksigner sign --ks release.keystore --ks-pass pass:android --key-pass pass:android --out DuckDuckGo-Release-Signed.apk aligned-app.apk
+
+      # 7. رفع ملف الـ APK النهائي الموقّع القابل للتثبيت المباشر
+      - name: Upload Production Release APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: DuckDuckGo-Engine-Release-Signed-APK
+          path: 'DuckDuckGo-Release-Signed.apk'

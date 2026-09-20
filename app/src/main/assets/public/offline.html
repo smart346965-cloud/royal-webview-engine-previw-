@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>انقطع الاتصال</title>
+    <style>
+        /* إعدادات عامة */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            /* التعديلات الجديدة لمنع تحديد النص */
+            -webkit-user-select: none; /* سفاري وآيفون */
+            -ms-user-select: none; /* إكسبلورر القديم */
+            user-select: none; /* المعيار الحديث لجميع المتصفحات */
+        }
+
+        html, body {
+            overscroll-behavior: none;
+        }
+
+        /* خلفية الصفحة: تدرج فضي فخم */
+        body {
+            background: linear-gradient(135deg, var(--royal-bg-start), var(--royal-bg-end));
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #111827;
+            -webkit-font-smoothing: antialiased;
+            -webkit-touch-callout: none;
+            overscroll-behavior-y: contain;
+        }
+
+        .content-wrapper {
+            text-align: center;
+            max-width: 480px; /* تقليص العرض قليلاً لتتجمع النصوص بشكل هرمي متناسق */
+            padding: 20px 25px;
+            animation: fadeUp 0.8s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+            opacity: 0;
+            transform: translateY(20px);
+            backdrop-filter: blur(6px);
+        }
+
+        /* =========================================
+           أيقونة الواي فاي مع علامة التعجب
+        ========================================= */
+        .modern-wifi-icon {
+            width: 110px;
+            height: 110px;
+            margin: 0 auto 30px auto;
+            /* حركة طفو ناعمة */
+            animation: float 4s ease-in-out infinite;
+        }
+
+        .modern-wifi-icon svg {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        /* ========================================= */
+
+        /* المحور الأول: العنوان */
+        h1 {
+            font-size: 28px;
+            font-weight: 700; /* وزن خط أثقل قليلاً للفخامة */
+            color: #1f2937;
+            margin-bottom: 12px;
+            position: relative;
+            /* تمت إزالة letter-spacing لأن اللغة العربية لا تتناسب معه */
+        }
+
+        /* 👑 خط سفلي ناعم بلون المتجر */
+        h1::after {
+            content: "";
+            display: block;
+            width: 40px;
+            height: 3px;
+            margin: 10px auto 0;
+            background: var(--royal-primary);
+            opacity: 0.4;
+            border-radius: 2px;
+        }
+
+        /* المحور الثاني: الوصف الدقيق */
+        p {
+            font-size: 16px;
+            line-height: 1.6;
+            color: rgba(55, 65, 81, 0.8);
+            margin-bottom: 35px;
+            padding: 0 10px; /* إعطاء مساحة تنفس للنص من الجوانب */
+        }
+
+        /* المحور الثالث: الزر الدائري الأنيق (Pill Shape) */
+        .reconnect-btn {
+            background-color: var(--royal-primary);
+            color: #ffffff;
+            border: none;
+            padding: 15px 45px; /* زيادة الحجم الداخلي ليتناسب مع الحواف الدائرية */
+            border-radius: 50px; /* حواف دائرية بالكامل */
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15); /* ظل ناعم وثابت */
+            /* انتقال حركي سلس جداً يشبه أنظمة آبل */
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); 
+            
+            /* التعديلات الجديدة لمنع ومضة الجوال وتأثير الزوم */
+            -webkit-tap-highlight-color: transparent; /* يمنع المربع الأزرق/الرمادي عند النقر في الجوال */
+            touch-action: manipulation; /* يمنع هزة الشاشة إذا ضغط المستخدم مرتين بسرعة */
+            outline: none; /* يمنع ظهور إطار حول الزر */
+            will-change: transform;
+            filter: saturate(0.9) brightness(0.95);
+        }
+
+        /* تأثير الزر عند مرور الماوس */
+        .reconnect-btn:hover {
+            background-color: #1e293b; /* تفتيح اللون قليلاً */
+            transform: translateY(-3px); /* ارتفاع للأعلى */
+            box-shadow: 0 8px 20px rgba(15, 23, 42, 0.25); /* اتساع الظل */
+        }
+
+        .reconnect-btn:active {
+            transform: translateY(0);
+            box-shadow: 0 2px 8px rgba(15, 23, 42, 0.15);
+        }
+
+        /* 👑 لو اللون فاتح، نخلي النص داكن */
+        :root[data-theme="light"] .reconnect-btn {
+            color: #111;
+        }
+
+        /* الحركات */
+        @keyframes fadeUp {
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes float {
+            0% { transform: translateY(0px); }
+            50% { transform: translateY(-8px); }
+            100% { transform: translateY(0px); }
+        }
+
+        /* تجاوب الشاشات */
+        @media (max-width: 600px) {
+            h1 { font-size: 24px; }
+            p { font-size: 15px; }
+            .modern-wifi-icon { width: 90px; height: 90px; margin-bottom: 25px; }
+            .reconnect-btn { width: 100%; /* زر بعرض الشاشة في الجوال */ padding: 16px 0; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="content-wrapper">
+    
+    <!-- أيقونة الواي فاي وعلامة التعجب -->
+    <div class="modern-wifi-icon">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
+            <!-- تقنية القناع (Mask) لعمل تفريغ شفاف وحقيقي حول علامة التعجب -->
+            <defs>
+                <mask id="exclamation-cutout">
+                    <rect width="100%" height="100%" fill="white" />
+                    <!-- تفريغ لخط التعجب -->
+                    <line x1="12" y1="8" x2="12" y2="17" stroke="black" stroke-width="5.5" stroke-linecap="round" />
+                    <!-- تفريغ لنقطة التعجب -->
+                    <circle cx="12" cy="21" r="2.8" fill="black" />
+                </mask>
+            </defs>
+
+            <!-- موجات الواي فاي -->
+            <g mask="url(#exclamation-cutout)">
+                <path d="M2 8.82a15 15 0 0 1 20 0" stroke="var(--royal-faded)" stroke-width="2.5" stroke-linecap="round"></path>
+                <path d="M5 12.86a10 10 0 0 1 14 0" stroke="var(--royal-faded)" stroke-width="2.5" stroke-linecap="round"></path>
+                <path d="M8.5 16.5a5 5 0 0 1 7 0" stroke="var(--royal-faded)" stroke-width="2.5" stroke-linecap="round"></path>
+            </g>
+
+            <!-- علامة التعجب البارزة في المنتصف -->
+            <line x1="12" y1="9" x2="12" y2="16" stroke="var(--royal-primary)" stroke-width="2.5" stroke-linecap="round"></line>
+            <circle cx="12" cy="21" r="1.5" fill="var(--royal-primary)"></circle>
+        </svg>
+    </div>
+
+    <!-- النصوص المحدثة -->
+    <h1>انقطع الاتصال</h1>
+    <p>يبدو أنك غير متصل حالياً. تأكد من الشبكة ثم حاول مرة أخرى</p>
+    
+    <!-- الزر الدائري الأنيق -->
+    <button class="reconnect-btn" id="retry-btn">إعادة المحاولة</button>
+</div>
+
+<!-- الجافاسكريبت المحدث والاحترافي -->
+<script>
+    // 👑 1. جلب الهوية المزدوجة للمتجر
+    let primaryRgb = 'rgb(15, 23, 42)';
+    let secondaryRgb = 'rgb(248, 250, 252)';
+    
+    try {
+        const savedIdentity = JSON.parse(localStorage.getItem('royal_brand_identity'));
+        if (savedIdentity) {
+            primaryRgb = savedIdentity.primary;
+            secondaryRgb = savedIdentity.secondary;
+        }
+    } catch (e) {}
+
+    // 👑 2. دالة استخراج الأرقام من صيغة rgb(r, g, b)
+    function extractRgbValues(rgbString) {
+        const match = rgbString.match(/\d+/g);
+        return match ? { r: match[0], g: match[1], b: match[2] } : { r: 15, g: 23, b: 42 };
+    }
+
+    const pColor = extractRgbValues(primaryRgb);
+    const sColor = extractRgbValues(secondaryRgb);
+
+    // 👑 3. الهندسة اللونية (كما طلبت تماماً)
+    
+    // - اللون الأساسي الصريح (للأزرار)
+    const purePrimary = `rgb(${pColor.r}, ${pColor.g}, ${pColor.b})`;
+    
+    // - علامة التعجب: غامقة أو بارزة بنسبة 65% (عبر الشفافية لدمج فخم مع الخلفية)
+    const exclamationColor = `rgba(${pColor.r}, ${pColor.g}, ${pColor.b}, 0.65)`;
+    
+    // - علامة الواي فاي: خفيفة جداً بنسبة 10%
+    const wifiWavesColor = `rgba(${pColor.r}, ${pColor.g}, ${pColor.b}, 0.10)`;
+    
+    // - الخلفية: نأخذ اللون الثانوي للمتجر ونجعله فاتحاً وخفيفاً جداً (2% إلى 4% شفافية فقط)
+    const bgGradientStart = `rgba(${sColor.r}, ${sColor.g}, ${sColor.b}, 0.04)`;
+    const bgGradientEnd   = `rgba(${sColor.r}, ${sColor.g}, ${sColor.b}, 0.01)`;
+
+    // 👑 4. حقن الألوان في متغيرات الـ CSS
+    document.documentElement.style.setProperty('--royal-primary', purePrimary);
+    document.documentElement.style.setProperty('--royal-faded', wifiWavesColor);
+    document.documentElement.style.setProperty('--royal-bg-start', bgGradientStart);
+    document.documentElement.style.setProperty('--royal-bg-end', bgGradientEnd);
+    
+    // 👑 5. تلوين علامة التعجب بـ CSS مخصص فوراً
+    const exclamationLines = document.querySelectorAll('line[stroke="var(--royal-primary)"], circle[fill="var(--royal-primary)"]');
+    exclamationLines.forEach(el => {
+        if (el.tagName === 'line') el.setAttribute('stroke', exclamationColor);
+        if (el.tagName === 'circle') el.setAttribute('fill', exclamationColor);
+    });
+
+    function retryConnection() {
+        // جلب الرابط الأصلي للمتجر من الـ URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const originUrl = urlParams.get('origin');
+        
+        // إذا وجد الرابط يعود إليه، وإلا يعود للجذر
+        window.location.href = originUrl ? decodeURIComponent(originUrl) : "/";
+    }
+
+    // التحديث التلقائي إذا عاد الإنترنت من تلقاء نفسه
+    window.addEventListener('online', function() {
+        window.location.reload();
+    });
+
+    // كود الزر الذكي
+    const btn = document.getElementById('retry-btn');
+
+    btn.addEventListener('click', function(e) {
+        e.preventDefault();
+
+        // 👑 منع أي إعادة رسم مزعجة
+        btn.blur();
+
+        // 👑 تأخير بسيط جداً لإعطاء الإحساس السلس
+        setTimeout(() => {
+            retryConnection();
+        }, 50);
+    }, { passive: true });
+
+    // 👑 منع التكبير بإصبعين (Pinch Zoom)
+    document.addEventListener('touchmove', function(e) {
+        if (e.touches.length > 1) {
+            e.preventDefault();
+        }
+    }, { passive: false });
+
+    // 👑 منع Double Tap Zoom
+    let lastTouchEnd = 0;
+
+    document.addEventListener('touchend', function (event) {
+        const now = Date.now();
+        if (now - lastTouchEnd <= 300) {
+            event.preventDefault();
+        }
+        lastTouchEnd = now;
+    }, false);
+</script>
+</body>
+                    </html>

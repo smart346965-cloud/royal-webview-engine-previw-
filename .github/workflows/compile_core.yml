@@ -1,0 +1,40 @@
+name: Royal Core Factory (WASM Only) 👑
+
+on:
+  workflow_dispatch: # 👑 لتفعيل زر البناء اليدوي داخل جيت هاب
+  push:
+    branches: [ main, master ] # 🚀 يعمل تلقائياً بمجرد رفع التعديلات
+    paths:
+      - 'nexus_core/**' 
+
+jobs:
+  build_wasm: # 🧠 تم مطابقة الاسم الموضح في صورتك تماماً
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code 📂
+        uses: actions/checkout@v4
+
+      - name: Install Emscripten ⚙️
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y emscripten
+          
+      - name: Cook The Nucleus (Wasm Compilation) 🍳
+        run: |
+          mkdir -p dist/js
+          # 🚀 التعديل الملكي: تفعيل دعم الـ Worker وإلغاء الاعتماد على واجهات الـ DOM
+          emcc nexus_core/royal_nucleus.cpp -o dist/js/royal_nucleus.js \
+            -O3 --bind -s WASM=1 -s MODULARIZE=1 \
+            -s EXPORT_NAME="createRoyalNucleusModule" \
+            -s "EXPORTED_RUNTIME_METHODS=['ccall','cwrap']" \
+            -s ENVIRONMENT='web,worker' \
+            -s ALLOW_MEMORY_GROWTH=1 -s MALLOC='emmalloc' --closure 0
+
+      - name: Upload Finished Artifacts (WASM & JS) 👑
+        uses: actions/upload-artifact@v4 # 🔥 التحديث الحاسم لـ v4 لمنع الخطأ تماماً
+        with:
+          name: Royal-Nucleus-Core-Outputs
+          path: |
+            dist/js/royal_nucleus.js
+            dist/js/royal_nucleus.wasm
+          retention-days: 7

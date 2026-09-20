@@ -1,0 +1,71 @@
+plugins {
+    alias(libs.plugins.androidApplication)
+}
+
+android {
+    namespace 'com.store.app'
+    compileSdk 36
+    buildToolsVersion "36.0.0"
+
+    buildFeatures {
+        buildConfig true
+    }
+
+    defaultConfig {
+        applicationId "com.store.app"
+        minSdk 24
+        targetSdk 36
+        versionCode 1
+        versionName "1.0"
+
+        def targetUrl = project.hasProperty('CLIENT_URL')
+                ? project.property('CLIENT_URL')
+                : "https://bellroy.com/"
+
+        buildConfigField "String", "CLIENT_URL", "\"${targetUrl}\""
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+        }
+    }
+    
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    // 🛡️ مكتبات أندرويد الأساسية
+    implementation libs.appcompat
+    implementation libs.material
+    implementation libs.activity
+    implementation libs.constraintlayout
+    
+    // 🛡️ AndroidX Core Engine (سحب الشاشة والـ Insets)
+    implementation libs.androidx.core
+    
+    // 🌐 WebKit
+    implementation libs.androidx.webkit
+    
+    // 🎨 Splash Screen
+    implementation libs.androidx.core.splashscreen
+    
+    // 🔔 OneSignal
+    implementation libs.onesignal
+
+    // 👑 WorkManager
+    implementation libs.work.runtime
+
+    // 🔐 Auth Tab / Custom Tabs (الحل الرسمي من Google لجميع المصادقات والدفع)
+    implementation libs.androidx.browser
+
+    // 🧪 اختبارات
+    testImplementation libs.junit
+    androidTestImplementation libs.ext.junit
+    androidTestImplementation libs.espresso.core
+}
