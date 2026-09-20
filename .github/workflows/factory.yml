@@ -1,325 +1,111 @@
 name: Royal Cloud Factory 👑
 
 on:
-  workflow_dispatch: # 👑 زر البناء اليدوي للتجارب
+  workflow_dispatch:
     inputs:
       test_url:
-        description: 'رابط الموقع للتجربة اليدوية (يُستخدم فقط عند البناء اليدوي)'
+        description: 'رابط الموقع (Target App URL)'
         required: true
         default: 'https://bellroy.com/'
+      app_name:
+        description: 'اسم التطبيق (App Name)'
+        required: false
+        default: 'Royal App'
+      app_id:
+        description: 'معرف التطبيق (App ID)'
+        required: false
+        default: 'com.royal.app'
+
   repository_dispatch:
-    types: [build_app] # 🚀 يظل مفتوحاً للـ Worker لإطلاق المصنع سحابياً
+    types: [build_app]
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Code 📥
+        uses: actions/checkout@v4
 
-      - name: Set up JDK 17
+      - name: Set up JDK 17 ☕
         uses: actions/setup-java@v4
         with:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Setup Android SDK 36 👑
+      - name: Setup Android SDK 36 📱
         uses: android-actions/setup-android@v4
         with:
           packages: 'platforms;android-36 build-tools;36.0.0'
           accept-android-sdk-licenses: true
 
-      - name: Grant execute permission
+      - name: Grant Execute Permission for Gradle 🔑
         run: chmod +x gradlew
 
-      - name: Prepare Production Keystore 🔐
-        env:
-          KEYSTORE_FILE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          KEYSTORE_PASSWORD_SECRET: ${{ secrets.RELEASE_STORE_PASSWORD }}
-          KEY_ALIAS_SECRET: ${{ secrets.RELEASE_KEY_ALIAS }}
-          KEY_PASSWORD_SECRET: ${{ secrets.RELEASE_KEY_PASSWORD }}
+      - name: Auto-Generate Ephemeral Production Keystore 🔐
         run: |
           set -euo pipefail
+          echo "🔑 Generating self-signed temporary keystore for build..."
+          
+          KEYSTORE_PASS="RoyalAutoSecretPass123"
+          KEY_ALIAS="royal_alias"
+          KEY_PASS="RoyalAutoSecretPass123"
 
-          if [ -z "$KEYSTORE_FILE_B64" ]; then
-            echo "❌ KEYSTORE_FILE secret is missing."
-            exit 1
-          fi
-
-          if [ -z "$KEYSTORE_PASSWORD_SECRET" ]; then
-            echo "❌ KEYSTORE_PASSWORD secret is missing."
-            exit 1
-          fi
-
-          if [ -z "$KEY_ALIAS_SECRET" ]; then
-            echo "❌ KEY_ALIAS secret is missing."
-            exit 1
-          fi
-
-          if [ -z "$KEY_PASSWORD_SECRET" ]; then
-            echo "❌ KEY_PASSWORD secret is missing."
-            exit 1
-          fi
-
-          echo "$KEYSTORE_FILE_B64" | base64 --decode > release-key.jks
-
-          if [ ! -s release-key.jks ]; then
-            echo "❌ Decoded keystore is empty."
-            rm -f release-key.jks
-            exit 1
-          fi
-
-          keytool -list \
+          keytool -genkeypair -v \
             -keystore release-key.jks \
-            -storepass "$KEYSTORE_PASSWORD_SECRET" \
-            -alias "$KEY_ALIAS_SECRET" \
-            >/dev/null
+            -alias "$KEY_ALIAS" \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -storepass "$KEYSTORE_PASS" \
+            -keypass "$KEY_PASS" \
+            -dname "CN=RoyalEngine, OU=Mobile, O=Royal, L=City, ST=State, C=US"
 
-          echo "KEYSTORE_PASSWORD=$KEYSTORE_PASSWORD_SECRET" >> "$GITHUB_ENV"
-          echo "KEY_ALIAS=$KEY_ALIAS_SECRET" >> "$GITHUB_ENV"
-          echo "KEY_PASSWORD=$KEY_PASSWORD_SECRET" >> "$GITHUB_ENV"
+          echo "KEYSTORE_PASSWORD=$KEYSTORE_PASS" >> "$GITHUB_ENV"
+          echo "KEY_ALIAS=$KEY_ALIAS" >> "$GITHUB_ENV"
+          echo "KEY_PASSWORD=$KEY_PASS" >> "$GITHUB_ENV"
 
-          echo "✅ Production keystore verified successfully."
+          echo "✅ Ephemeral keystore created and verified successfully."
 
-      # 👑 تعطيل مؤقت لأننا نختبر يدويًا بدون سيرفر/وركر
-      # - name: Generate Client Config 👑
-      #   run: |
-      #     cat > client-config.properties <<EOF
-      #     PACKAGE_NAME=${{ github.event.client_payload.package }}
-      #     CLIENT_URL=${{ github.event.client_payload.url }}
-      #     APP_NAME=${{ github.event.client_payload.name }}
-      #     THEME_COLOR=#ffffff
-      #     IS_LIGHT_BG=true
-      #     EOF
-
-      - name: Generate config.json (Native Engine Only) 👑
-        if: github.event.client_payload.plan == 'native_engine'
-        run: |
-          echo "🔥 Creating runtime config.json for Premium App..."
-          mkdir -p output_config
-          
-          cat << 'EOF' > output_config/config.json
-          ${{ toJson(github.event.client_payload) }}
-          EOF
-
-          echo "✅ Config JSON Generated Successfully:"
-          cat output_config/config.json
-
-      # 🧩 1. سحب موديول العميل الفاخر من المستودع الخاص
-      - name: Fetch VIP Client Modules 🧩
-        if: github.event.client_payload.plan == 'native_engine'
-        uses: actions/checkout@v4
-        with:
-          repository: 'smart346965-cloud/nexus-clients-modules' # 👈 مستودع الموديولات المخصص
-          token: ${{ secrets.MODULES_REPOSITORY_PAT }} # 👈 المفتاح السري المعتمد
-          path: 'temp_vip_modules'
-
-      # 💉 2. حقن ملفات الكود والتصاميم بداخل كود الأندرويد الأصلي
-      - name: Inject VIP Modules into Android Project 💉
-        if: github.event.client_payload.plan == 'native_engine'
-        run: |
-          CLIENT_UID="${{ github.event.client_payload.uid }}"
-          APP_ID="${{ github.event.client_payload.appId }}"
-          
-          # المسار الدقيق لموديول العميل المعني
-          MODULE_PATH="temp_vip_modules/clients/client_${CLIENT_UID}/modules/mod_header_${APP_ID}"
-
-          echo "🚀 Injecting Custom Native Modules for Client UID: ${CLIENT_UID} | AppID: ${APP_ID}"
-
-          # إنشاء مجلدات المستقبل داخل مشروع الأندرويد
-          mkdir -p app/src/main/java/com/store/app/modules/
-          mkdir -p app/src/main/res/layout/
-
-          # أ. نسخ ملفات كود الأندرويد (Kotlin / Java)
-          if [ -d "$MODULE_PATH" ]; then
-            find "$MODULE_PATH" -type f \( -name "*.kt" -o -name "*.java" \) -exec cp {} app/src/main/java/com/store/app/modules/ \;
-            echo "✅ Native Code Files Injected Successfully!"
-
-            # ب. نسخ ملفات التنسيق والواجهات (XML Layouts)
-            find "$MODULE_PATH" -type f -name "*.xml" -exec cp {} app/src/main/res/layout/ \;
-            echo "✅ XML Layout Files Injected Successfully!"
-          else
-            echo "⚠️ Notice: VIP Module Directory Not Found at $MODULE_PATH. Building with Base Default Slots."
-          fi
-
-          # تنظيف المجلد المؤقت
-          rm -rf temp_vip_modules
-
-      - name: Verify Build Toolchain 👑
+      - name: Verify Build Toolchain 🛠️
         run: |
           echo "========== JAVA =========="
           java -version
-
           echo "========== GRADLE =========="
           ./gradlew --version
 
-          echo "========== ANDROID SDK =========="
-          sdkmanager --list_installed | grep -E "platforms;android-36|build-tools;36.0.0" || true
-
-      - name: Nexus Root Diagnostic 🔍
+      - name: Build Signed APK & AAB 🚀
         run: |
-          echo "========== BUILD.GRADLE CONTENT =========="
-          cat build.gradle
-          echo "========== GRADLE VERSION =========="
-          ./gradlew --version
+          INJECTED_URL="${{ github.event.inputs.test_url || github.event.client_payload.url || 'https://bellroy.com/' }}"
+          APP_ID="${{ github.event.inputs.app_id || github.event.client_payload.appId || 'com.royal.app' }}"
 
-      - name: Auto-Fetch Lucide SVG Icons 🎨
-        if: github.event.client_payload.plan == 'native_engine'
-        run: |
-          echo "🎨 Processing Icon Download for Premium Bottom Navigation..."
-          mkdir -p app/src/main/res/drawable/
-          
-          # استخراج أسماء الأيقونات وتنزيلها تلقائياً كملفات Vector
-          ICONS=$(echo '${{ toJson(github.event.client_payload.bottomNav) }}' | jq -r '.[].iconName // empty')
-
-          for icon in $ICONS; do
-            if [ -n "$icon" ]; then
-              # تحويل الاسم إلى حروف صغيرة تلقائياً لمنع أخطاء 404
-              icon_lower=$(echo "$icon" | tr '[:upper:]' '[:lower:]')
-              echo "📥 Fetching Lucide Icon: $icon_lower"
-              curl -sL "https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/${icon_lower}.svg" -o "app/src/main/res/drawable/ic_lucide_${icon_lower}.svg" || true
-            fi
-          done
-
-      - name: Build Signed APK & AAB 👑
-        run: |
-          INJECTED_URL="${{ github.event.client_payload.url || github.event.inputs.test_url }}"
-          PLAN_TYPE="${{ github.event.client_payload.plan || 'app_conversion' }}"
-          APP_ID="${{ github.event.client_payload.appId || 'default' }}"
-
-          # تحديد رابط الإعدادات فقط إذا كانت الباقة native_engine
-          if [ "$PLAN_TYPE" = "native_engine" ]; then
-            CONFIG_URL_PARAM="-PCONFIG_URL=https://cdn.yourdomain.com/configs/${APP_ID}.json"
-          else
-            CONFIG_URL_PARAM="-PCONFIG_URL="
-          fi
-
-          echo "🔥 Injecting Target URL: $INJECTED_URL | Plan: $PLAN_TYPE"
+          echo "🔥 Injecting Target URL: $INJECTED_URL | App ID: $APP_ID"
 
           ./gradlew clean assembleRelease bundleRelease --no-build-cache \
             -Pandroid.injected.signing.store.file=$(pwd)/release-key.jks \
             -Pandroid.injected.signing.store.password=${{ env.KEYSTORE_PASSWORD }} \
             -Pandroid.injected.signing.key.alias=${{ env.KEY_ALIAS }} \
             -Pandroid.injected.signing.key.password=${{ env.KEY_PASSWORD }} \
-            -PCLIENT_URL="$INJECTED_URL" \
-            $CONFIG_URL_PARAM
+            -PCLIENT_URL="$INJECTED_URL"
 
-      - name: Extract Real SHA256 Fingerprint 🔐
-        id: cert_info
+      - name: Extract REAL SHA256 Fingerprint 🔐
         run: |
-          # استخراج البصمة الحقيقية بالملي من ملف الشهادة المستخدم في التوقيع
           SHA256_HEX=$(keytool -list -v -keystore release-key.jks -storepass "${{ env.KEYSTORE_PASSWORD }}" -alias "${{ env.KEY_ALIAS }}" | grep "SHA256:" | awk '{print $2}')
-          echo "PROP_SHA256=$SHA256_HEX" >> $GITHUB_ENV
-          
-          # ========================================================
-          # 👑 أمر الطباعة في السجل لرؤية البصمة بعينك ونسخها 👑
-          # ========================================================
           echo "========================================================"
-          echo "🔥 الف مبروك! البصمة الحقيقية للتطبيق هي: $SHA256_HEX"
+          echo "🔥 بصمة الشهادة المستخدمة في توقيع هذا الإصدار:"
+          echo "SHA256: $SHA256_HEX"
           echo "========================================================"
 
-      # 🚀 الرفع التلقائي إلى المستودع العام nexus-downloads (مع معالجة الملفات الاختيارية)
-      - name: 🚀 Publish Build Artifacts to GitHub Releases
-        env:
-          GH_TOKEN: ${{ secrets.DOWNLOADS_REPO_TOKEN }}
-          PUBLIC_REPO: "${{ github.repository_owner }}/nexus-downloads"
-        run: |
-          APP_ID="${{ github.event.client_payload.appId || 'default' }}"
-          BUILD_UID="${{ github.event.client_payload.uid || 'manual' }}"
-          TAG_NAME="v${APP_ID}-${GITHUB_RUN_ID}"
-          REPO_OWNER="${{ github.repository_owner }}"
-
-          # البحث عن ملفات APK و AAB الناتجة
-          APK_FILE=$(find app/build/outputs/apk/release/ -name "*.apk" | head -n 1)
-          AAB_FILE=$(find app/build/outputs/bundle/release/ -name "*.aab" | head -n 1)
-
-          # تجهيز قائمة الملفات المخصصة للرفع
-          FILES_TO_UPLOAD=("$APK_FILE#${APP_ID}-release.apk" "$AAB_FILE#${APP_ID}-release.aab")
-
-          # فحص وجود ملف الإعدادات قبل إضافته للرفع لضمان عدم حدوث خطأ في الباقات العادية
-          if [ -f "output_config/config.json" ]; then
-            FILES_TO_UPLOAD+=("output_config/config.json#config-${APP_ID}.json")
-            BUILD_CONFIG_PUBLIC_URL="https://github.com/${REPO_OWNER}/nexus-downloads/releases/download/${TAG_NAME}/config-${APP_ID}.json"
-          else
-            BUILD_CONFIG_PUBLIC_URL=""
-          fi
-
-          echo "📦 Uploading assets to $PUBLIC_REPO..."
-
-          # إنشاء الإصدار الموحد ورفع الملفات المتوفرة
-          gh release create "$TAG_NAME" \
-            --repo "$PUBLIC_REPO" \
-            --title "Build: ${APP_ID} (${BUILD_UID})" \
-            --notes "Automated build assets for App ID: ${APP_ID} | UID: ${BUILD_UID}" \
-            "${FILES_TO_UPLOAD[@]}"
-
-          # إعداد تصدير الروابط إلى بيئة GitHub Actions
-          FINAL_APK_URL="https://github.com/${REPO_OWNER}/nexus-downloads/releases/download/${TAG_NAME}/${APP_ID}-release.apk"
-          FINAL_AAB_URL="https://github.com/${REPO_OWNER}/nexus-downloads/releases/download/${TAG_NAME}/${APP_ID}-release.aab"
-
-          echo "BUILD_APK_PUBLIC_URL=${FINAL_APK_URL}" >> $GITHUB_ENV
-          echo "BUILD_AAB_PUBLIC_URL=${FINAL_AAB_URL}" >> $GITHUB_ENV
-          echo "BUILD_CONFIG_URL=${BUILD_CONFIG_PUBLIC_URL}" >> $GITHUB_ENV
-
-      - name: Upload Finished APK
+      - name: Upload Final Signed APK 📦
         uses: actions/upload-artifact@v4
         with:
-          name: Royal-App-Final-APK
+          name: Royal-App-Release-APK
           path: app/build/outputs/apk/release/*.apk
+          retention-days: 30
 
-      - name: Find and Upload APK
+      - name: Upload Final Signed AAB (App Bundle) 📦
         uses: actions/upload-artifact@v4
         with:
-          name: All-Found-APKs
-          path: |
-            **/*.apk
-            **/*.aab
-
-      - name: Archive Built Royal Assets 👑
-        uses: actions/upload-artifact@v4
-        with:
-          name: Royal-Wasm-Assets-Verification
-          path: app/src/main/assets/public/js/
-
-      # ============================================================
-      # 🔐 Notify Nexus Worker with verified build result
-      # ============================================================
-      - name: Notify Nexus Worker with Real Data 🔔
-        if: ${{ success() && github.event_name == 'repository_dispatch' }}
-        env:
-          WEBHOOK_SECRET: ${{ secrets.BUILD_WEBHOOK_SECRET }}
-          BUILD_UID: ${{ github.event.client_payload.uid }}
-          BUILD_APP_ID: ${{ github.event.client_payload.appId }}
-          BUILD_SHA256: ${{ env.PROP_SHA256 }}
-          BUILD_STATUS: completed
-          BUILD_APK_URL: ${{ env.BUILD_APK_PUBLIC_URL }}
-          BUILD_AAB_URL: ${{ env.BUILD_AAB_PUBLIC_URL }}
-          BUILD_CONFIG_URL: ${{ env.BUILD_CONFIG_URL }}
-          BUILD_BOOST_SCRIPT: <script src="https://cdn.nexusui.engine/v2/boost.js" data-app-id="NX-${{ github.event.client_payload.uid }}"></script>
-
-        run: |
-          set -euo pipefail
-
-          echo "🔔 Sending verified build result to Nexus Worker..."
-          echo "App ID: $BUILD_APP_ID"
-          echo "Status: $BUILD_STATUS"
-
-          curl --fail-with-body \
-            -X POST \
-            "https://nexus-auth-manager.smart346965.workers.dev/build-webhook" \
-            -H "Content-Type: application/json" \
-            -H "X-Nexus-Build-Secret: $WEBHOOK_SECRET" \
-            --data-binary @- <<EOF
-          {
-            "uid": "$BUILD_UID",
-            "appId": "$BUILD_APP_ID",
-            "status": "$BUILD_STATUS",
-            "sha256": "$BUILD_SHA256",
-            "apkUrl": "$BUILD_APK_URL",
-            "aabUrl": "$BUILD_AAB_URL",
-            "configUrl": "$BUILD_CONFIG_URL",
-            "boostScript": "$BUILD_BOOST_SCRIPT"
-          }
-          EOF
-
-          echo "✅ Nexus Worker accepted build result."
+          name: Royal-App-Release-AAB
+          path: app/build/outputs/bundle/release/*.aab
+          retention-days: 30
