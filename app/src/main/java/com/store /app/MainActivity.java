@@ -48,16 +48,30 @@ import com.store.app.RoyalJsBridge;
 public class MainActivity extends AppCompatActivity {
 
     private static final String TAG = "RoyalMainActivity";
-    private static final long FIXED_SPLASH_TIME = 5000L; // قيمة ثابتة 5 ثوانٍ بالتمام والكمال
+
+    /*
+     * Splash readiness is based on:
+     * 1. A protected minimum display time.
+     * 2. A valid WebView page completion signal.
+     * 3. A visual-state callback after onPageFinished.
+     *
+     * The maximum timeout prevents an infinite splash when the
+     * remote page or WebView renderer fails.
+     */
+    private static final long MIN_SPLASH_TIME = 3000L;
+    private static final long MAX_SPLASH_TIME = 10000L;
 
     private boolean splashRemoved = false;
-    private boolean isPageLoaded = false; // لمنع إعادة تحميل الصفحة في onResume
+    private boolean isPageLoaded = false;
     private boolean webViewReady = false;
     private boolean visualStateReady = false;
     private boolean webViewRevealed = false;
 
+    private boolean splashPageFinished = false;
+    private boolean splashVisualStateReady = false;
+
     private WebEngineManager engineManager;
-    private RoyalCapabilitiesEngine capabilitiesEngine; // ✅ إضافة تعريف المحرك
+    private RoyalCapabilitiesEngine capabilitiesEngine;
     private WebView activeWebView;
     private ProgressBar progressBar;
 
@@ -68,6 +82,12 @@ public class MainActivity extends AppCompatActivity {
 
     // 🔥 مدير المصادقة والدفع
     private RoyalAuthManager royalAuthManager;
+
+    /*
+     * OAuth callback may arrive through onNewIntent() before
+     * RoyalAuthManager and the WebView are ready.
+     */
+    private Intent pendingAuthIntent;
 
     private FrameLayout rootContainer;
 
@@ -93,15 +113,28 @@ public class MainActivity extends AppCompatActivity {
         splashStartTime = System.currentTimeMillis();
 
         /*
-         * 👑 Splash ثابت لمدة 5 ثوانٍ حقيقية.
+         * Splash policy:
          *
-         * WebView / Chromium يعملان بالتوازي في الخلفية.
-         * لا ننتظر WebView حتى يبدأ.
+         * - It must remain visible for at least three seconds.
+         * - After three seconds, it may exit only after the WebView
+         *   reports a valid page completion followed by a visual-state
+         *   callback.
+         * - The maximum timeout prevents an infinite splash if the
+         *   remote page never completes.
          */
-        splashScreen.setKeepOnScreenCondition(
-                () -> System.currentTimeMillis() - splashStartTime
-                        < FIXED_SPLASH_TIME
-        );
+        splashScreen.setKeepOnScreenCondition(() -> {
+            long elapsed = System.currentTimeMillis() - splashStartTime;
+
+            if (elapsed < MIN_SPLASH_TIME) {
+                return true;
+            }
+
+            if (splashPageFinished && splashVisualStateReady) {
+                return false;
+            }
+
+            return elapsed < MAX_SPLASH_TIME;
+        });
 
         splashScreen.setOnExitAnimationListener(
                 splashScreenView -> {
@@ -523,8 +556,14 @@ public class MainActivity extends AppCompatActivity {
                         getApplicationContext()
                 );
 
-        // ✅ معالجة Intent الأولي للـ Auth
-        handleInitialAuthIntent(getIntent());
+        // ✅ معالجة Intent الأولي أو Intent المؤجل للـ Auth
+        Intent authIntentToProcess = pendingAuthIntent != null
+                ? pendingAuthIntent
+                : getIntent();
+
+        pendingAuthIntent = null;
+
+        handleInitialAuthIntent(authIntentToProcess);
 
         if (!NetworkMonitor.isInternetAvailable(this)) {
 
@@ -535,6 +574,55 @@ public class MainActivity extends AppCompatActivity {
 
         // 👑 فحص وتفعيل الموديولات للباقة الفاخرة (إن وجدت)
         loadVIPModules();
+    }
+
+    /**
+     * Called only after WebEngineManager receives a valid onPageFinished event.
+     *
+     * onPageFinished alone is not considered visually ready. We request a
+     * second visual-state confirmation to ensure that Chromium has committed
+     * a drawable frame before allowing the Android splash to leave.
+     */
+    public void notifyPageFinishedForSplash(@NonNull WebView view) {
+        if (view != activeWebView || splashPageFinished) {
+            return;
+        }
+
+        splashPageFinished = true;
+
+        if (WebViewFeature.isFeatureSupported(
+                WebViewFeature.VISUAL_STATE_CALLBACK
+        )) {
+            WebViewCompat.postVisualStateCallback(
+                    view,
+                    System.nanoTime(),
+                    requestId -> view.post(() -> {
+                        if (view != activeWebView || isFinishing()) {
+                            return;
+                        }
+
+                        splashVisualStateReady = true;
+                        visualStateReady = true;
+
+                        Log.i(
+                                TAG,
+                                "🎨 Splash visual readiness confirmed after onPageFinished."
+                        );
+                    })
+            );
+        } else {
+            /*
+             * On old WebView implementations, onPageFinished is the strongest
+             * available signal.
+             */
+            splashVisualStateReady = true;
+            visualStateReady = true;
+
+            Log.i(
+                    TAG,
+                    "🎨 VisualStateCallback unavailable; using onPageFinished."
+            );
+        }
     }
 
     // =========================================================
@@ -578,7 +666,7 @@ public class MainActivity extends AppCompatActivity {
                     activeWebView
             );
 
-            if (System.currentTimeMillis() - splashStartTime >= FIXED_SPLASH_TIME) {
+            if (System.currentTimeMillis() - splashStartTime >= MIN_SPLASH_TIME) {
                 SystemUI.scheduleStatusBarSync(
                         this,
                         activeWebView
@@ -733,28 +821,39 @@ public class MainActivity extends AppCompatActivity {
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
 
-        setIntent(intent);
-
         if (intent == null) {
             return;
         }
 
+        setIntent(intent);
+
         Uri data = intent.getData();
 
-        if (data == null) {
+        if (data == null || !RoyalAuthManager.isAuthCallback(data)) {
             return;
         }
 
-        Log.i(TAG, "🔗 Deep link received in onNewIntent: " + data.toString());
+        Log.i(
+                TAG,
+                "🔗 OAuth callback received in onNewIntent: "
+                        + data.toString()
+        );
 
-        if (royalAuthManager != null) {
-            boolean handled = royalAuthManager.handleRedirectIntent(intent);
-            if (!handled && activeWebView != null && RoyalAuthManager.isAuthCallback(data)) {
-                dispatchAuthUrlToWebView(data.toString());
-            }
-        } else if (activeWebView != null && RoyalAuthManager.isAuthCallback(data)) {
-            dispatchAuthUrlToWebView(data.toString());
+        /*
+         * With singleTask, the callback can arrive while the Activity exists
+         * but before the WebView/Auth manager has completed initialization.
+         * Preserve the exact Intent instead of losing the callback.
+         */
+        if (royalAuthManager == null || activeWebView == null) {
+            pendingAuthIntent = new Intent(intent);
+            Log.i(
+                    TAG,
+                    "⏳ OAuth callback queued until WebView/Auth are ready."
+            );
+            return;
         }
+
+        royalAuthManager.handleRedirectIntent(intent);
     }
 
     /**
@@ -762,23 +861,23 @@ public class MainActivity extends AppCompatActivity {
      */
     private void handleInitialAuthIntent(Intent intent) {
 
-        if (intent == null) {
+        if (intent == null || royalAuthManager == null || activeWebView == null) {
             return;
         }
 
         Uri data = intent.getData();
 
-        if (data == null) {
+        if (data == null || !RoyalAuthManager.isAuthCallback(data)) {
             return;
         }
 
-        Log.i(TAG, "🔗 Initial Auth Intent received: " + data.toString());
+        Log.i(
+                TAG,
+                "🔗 Initial OAuth callback received: "
+                        + data.toString()
+        );
 
-        if (royalAuthManager != null) {
-            royalAuthManager.handleRedirectIntent(intent);
-        } else if (activeWebView != null && RoyalAuthManager.isAuthCallback(data)) {
-            dispatchAuthUrlToWebView(data.toString());
-        }
+        royalAuthManager.handleRedirectIntent(intent);
     }
 
     // =========================================================
@@ -858,7 +957,7 @@ public class MainActivity extends AppCompatActivity {
                         activeWebView
                 );
 
-                if (System.currentTimeMillis() - splashStartTime >= FIXED_SPLASH_TIME) {
+                if (System.currentTimeMillis() - splashStartTime >= MIN_SPLASH_TIME) {
                     SystemUI.scheduleStatusBarSync(
                             this,
                             activeWebView
