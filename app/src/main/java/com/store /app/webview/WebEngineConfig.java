@@ -57,7 +57,7 @@ public class WebEngineConfig {
          */
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            settings.setOffscreenPreRaster(false);
+            settings.setOffscreenPreRaster(true);
         }
 
         settings.setLayoutAlgorithm(
