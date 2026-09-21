@@ -83,6 +83,21 @@ public class WebEngineConfig {
         settings.setDomStorageEnabled(true);
         settings.setDatabaseEnabled(true);
 
+        /*
+         * Payment providers may use window.open() for:
+         * - 3-D Secure
+         * - PayPal approval
+         * - bank authentication
+         * - hosted payment challenge pages
+         *
+         * The actual popup is controlled by RoyalCapabilitiesEngine
+         * through WebChromeClient.onCreateWindow().
+         */
+        settings.setJavaScriptCanOpenWindowsAutomatically(true);
+        settings.setSupportMultipleWindows(true);
+
+        configureNexusUserAgent(settings);
+
         settings.setCacheMode(
                 WebSettings.LOAD_DEFAULT
         );
@@ -131,6 +146,36 @@ public class WebEngineConfig {
                     true
             );
         }
+    }
+
+    private void configureNexusUserAgent(WebSettings settings) {
+        if (settings == null) {
+            return;
+        }
+
+        String originalUserAgent = settings.getUserAgentString();
+
+        if (originalUserAgent == null || originalUserAgent.trim().isEmpty()) {
+            return;
+        }
+
+        String nexusUserAgent = originalUserAgent
+                .replace("; wv", "")
+                .replace("Version/4.0 ", "")
+                .replace("Version/4.0", "")
+                .replaceAll("\\s{2,}", " ")
+                .trim();
+
+        if (!nexusUserAgent.contains("NexusEngine/1.0")) {
+            nexusUserAgent = nexusUserAgent + " NexusEngine/1.0";
+        }
+
+        settings.setUserAgentString(nexusUserAgent);
+
+        Log.i(
+                TAG,
+                "✅ Nexus-compatible Chromium User-Agent configured."
+        );
     }
 
     // =========================================================
@@ -258,4 +303,4 @@ public class WebEngineConfig {
     public int getTrustedPort() {
         return trustedPort;
     }
-            }
+                         }
