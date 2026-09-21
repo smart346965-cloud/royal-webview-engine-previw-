@@ -1,5 +1,18 @@
 /* 👑 ROYAL NUCLEUS ELITE LOADER (Streaming Edition + Telemetry Engine) */
 (function() {
+    if (!window.__NEXUS_ENGINE_IDENTITY__) {
+        Object.defineProperty(window, '__NEXUS_ENGINE_IDENTITY__', {
+            value: Object.freeze({
+                name: 'NexusEngine',
+                version: '1.0',
+                chromiumCompatible: true
+            }),
+            configurable: false,
+            enumerable: false,
+            writable: false
+        });
+    }
+
     // =========================================================================
     // 🔬 NEXUS TELEMETRY ENGINE: نظام الرادار التشخيصي الدقيق
     // =========================================================================
