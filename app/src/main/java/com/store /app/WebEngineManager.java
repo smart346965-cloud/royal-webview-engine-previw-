@@ -604,6 +604,38 @@ public class WebEngineManager {
 
     public boolean isOnErrorPage() { return OfflineStateManager.getInstance().isOnErrorPage(); }
 
+    private boolean launchIntentScheme(Uri uri) {
+        if (activity == null || uri == null) return true;
+        try {
+            Intent intent = Intent.parseUri(uri.toString(), Intent.URI_INTENT_SCHEME);
+            if (intent.resolveActivity(activity.getPackageManager()) != null) {
+                activity.startActivity(intent);
+                return true;
+            }
+            String fallbackUrl = intent.getStringExtra("browser_fallback_url");
+            if (fallbackUrl != null && !fallbackUrl.trim().isEmpty()) {
+                Uri fallbackUri = Uri.parse(fallbackUrl);
+                if ("https".equalsIgnoreCase(fallbackUri.getScheme())) {
+                    new CustomTabsIntent.Builder().build().launchUrl(activity, fallbackUri);
+                    return true;
+                }
+            }
+        } catch (Exception e) { Log.w(TAG, "Payment intent:// handling failed.", e); }
+        return true;
+    }
+
+    private boolean isPaymentExternalScheme(String scheme) {
+        if (scheme == null) return false;
+        String normalized = scheme.toLowerCase(java.util.Locale.ROOT);
+        return "intent".equals(normalized)
+                || "upi".equals(normalized)
+                || "pay".equals(normalized)
+                || "paypal".equals(normalized)
+                || "alipay".equals(normalized)
+                || "gpay".equals(normalized)
+                || "applepay".equals(normalized);
+    }
+
     private boolean handleUriLogic(Uri uri, boolean isMainFrame) {
         if (uri == null) return false;
         if (!NetworkMonitor.isInternetAvailable(context)) {
@@ -612,7 +644,17 @@ public class WebEngineManager {
         }
         String scheme = uri.getScheme();
         if (scheme == null) return false;
-        scheme = scheme.toLowerCase();
+        scheme = scheme.toLowerCase(java.util.Locale.ROOT);
+
+        /*
+         * Payment and wallet URI schemes must be handled before
+         * same-origin and generic external URL logic.
+         */
+        if (isPaymentExternalScheme(scheme)) {
+            if ("intent".equals(scheme)) return launchIntentScheme(uri);
+            return launchExternal(uri);
+        }
+
         if (isLogoutUrl(uri)) {
             Log.i(TAG, "🧹 Logout URL detected -> Triggering Native Session Purge for: " + uri);
             clearNativeSession(null);
@@ -621,7 +663,19 @@ public class WebEngineManager {
         if (webEngineConfig.isSameOrigin(uri)) return false;
         if (isSensitiveNavigation(uri)) return launchSensitiveFlow(uri);
         switch (scheme) {
-            case "tel": case "mailto": case "sms": case "smsto": case "geo": case "market": case "intent": case "whatsapp":
+            case "tel":
+            case "mailto":
+            case "sms":
+            case "smsto":
+            case "geo":
+            case "market":
+            case "whatsapp":
+            case "upi":
+            case "pay":
+            case "paypal":
+            case "alipay":
+            case "gpay":
+            case "applepay":
                 return launchExternal(uri);
         }
         if ("http".equals(scheme) || "https".equals(scheme)) return launchExternalWebUrl(uri);
@@ -631,4 +685,4 @@ public class WebEngineManager {
         }
         return launchExternal(uri);
     }
-        }
+}
