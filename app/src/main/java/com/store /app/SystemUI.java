@@ -168,25 +168,82 @@ public class SystemUI {
         applyHeaderColorInternal(activity, targetColor, true);
     }
 
-    private static void applyHeaderColorInternal(android.app.Activity activity, int targetColor, boolean updateIcons) {
-        if (activity == null || activity.isFinishing()) return;
+    private static void applyHeaderColorInternal(
+            android.app.Activity activity,
+            int targetColor,
+            boolean updateIcons
+    ) {
+        if (activity == null || activity.isFinishing()) {
+            return;
+        }
+
         activity.runOnUiThread(() -> {
             Window window = activity.getWindow();
-            if (window == null) return;
+
+            if (window == null) {
+                return;
+            }
+
             window.setStatusBarColor(Color.TRANSPARENT);
-            int defaultBg = getDefaultSystemColor(activity);
-            int solidColor = compositeColorWithBackground(targetColor, defaultBg);
-            View topSurface = activity.findViewById(android.R.id.content).findViewWithTag("TOP_VISUAL_SURFACE");
+
+            int defaultBg =
+                    getDefaultSystemColor(activity);
+
+            int solidColor =
+                    compositeColorWithBackground(
+                            targetColor,
+                            defaultBg
+                    );
+
+            View contentView =
+                    activity.findViewById(
+                            android.R.id.content
+                    );
+
+            View topSurface =
+                    contentView != null
+                            ? contentView.findViewWithTag(
+                                    "TOP_VISUAL_SURFACE"
+                            )
+                            : null;
+
             if (topSurface != null) {
                 topSurface.setBackgroundColor(solidColor);
+                topSurface.setVisibility(View.VISIBLE);
+                topSurface.bringToFront();
             }
+
+            /*
+             * Color and icon appearance are committed together.
+             * This prevents white icons on a white native surface.
+             */
             if (updateIcons) {
-                applyStatusBarIconAppearance(window, solidColor);
-                WindowInsetsControllerCompat navigationController = WindowCompat.getInsetsController(window, window.getDecorView());
-                if (navigationController != null) {
-                    navigationController.setAppearanceLightNavigationBars(isColorLight(getDefaultSystemColor(activity)));
+                boolean lightBackground =
+                        isColorLight(solidColor);
+
+                WindowInsetsControllerCompat controller =
+                        WindowCompat.getInsetsController(
+                                window,
+                                window.getDecorView()
+                        );
+
+                if (controller != null) {
+                    controller.setAppearanceLightStatusBars(
+                            lightBackground
+                    );
+
+                    /*
+                     * Navigation-bar appearance is independent from
+                     * the status-bar/header color.
+                     */
+                    controller.setAppearanceLightNavigationBars(
+                            isColorLight(
+                                    getDefaultSystemColor(activity)
+                            )
+                    );
                 }
             }
+
             currentHeaderColor = solidColor;
         });
     }
@@ -226,12 +283,22 @@ public class SystemUI {
         applyHeaderColor(activity, targetColor);
     }
 
-    public static void restoreHeaderOnResume(android.app.Activity activity) {
+    public static void restoreHeaderOnResume(
+            android.app.Activity activity
+    ) {
+        /*
+         * A focus/resume event must never restore the previous page color.
+         * Page navigation is the only authority for header synchronization.
+         */
         if (activity == null || activity.isFinishing()) {
             return;
         }
+
         if (currentHeaderColor == Integer.MIN_VALUE) {
-            applyHeaderColor(activity, getDefaultSystemColor(activity));
+            applyHeaderColor(
+                    activity,
+                    getDefaultSystemColor(activity)
+            );
         }
     }
 
@@ -345,6 +412,31 @@ public class SystemUI {
                     activity,
                     parsedColor
             );
+        });
+    }
+
+    public static void beginPageNavigation(
+            android.app.Activity activity,
+            WebView webView,
+            String url
+    ) {
+        if (activity == null
+                || activity.isFinishing()
+                || webView == null) {
+            return;
+        }
+
+        activity.runOnUiThread(() -> {
+            syncGeneration++;
+            cancelStatusBarSync();
+
+            /*
+             * Keep the current surface visible during navigation.
+             * Do not reset it to an arbitrary color, otherwise the
+             * user sees a flash. The new page will replace it only
+             * after commit.
+             */
+            currentHeaderUrl = url;
         });
     }
 
