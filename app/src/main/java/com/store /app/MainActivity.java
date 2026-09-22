@@ -66,6 +66,10 @@ public class MainActivity extends AppCompatActivity {
     private FrameLayout webViewContainer;
     private View topVisualSurface;
 
+    public WebView getActiveWebView() {
+        return activeWebView;
+    }
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         final SplashScreen splashScreen = SplashScreen.installSplashScreen(this);
@@ -674,5 +678,4 @@ public class MainActivity extends AppCompatActivity {
             Log.e(TAG, "⚠️ Failed to initialize Native Modules.", t);
         }
     }
-                                     }
-                    
+                              }
