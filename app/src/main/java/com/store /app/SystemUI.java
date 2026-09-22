@@ -218,7 +218,12 @@ public class SystemUI {
              * This prevents white icons on a white native surface.
              */
             if (updateIcons) {
-                boolean lightBackground =
+
+                /*
+                 * The icon decision must use the exact color that was applied
+                 * to TOP_VISUAL_SURFACE, not the raw page color.
+                 */
+                boolean lightStatusBarBackground =
                         isColorLight(solidColor);
 
                 WindowInsetsControllerCompat controller =
@@ -228,13 +233,18 @@ public class SystemUI {
                         );
 
                 if (controller != null) {
+
+                    /*
+                     * true  = dark icons for a light background
+                     * false = light icons for a dark background
+                     */
                     controller.setAppearanceLightStatusBars(
-                            lightBackground
+                            lightStatusBarBackground
                     );
 
                     /*
-                     * Navigation-bar appearance is independent from
-                     * the status-bar/header color.
+                     * Navigation-bar appearance is independent from the top
+                     * status-bar surface.
                      */
                     controller.setAppearanceLightNavigationBars(
                             isColorLight(
@@ -475,7 +485,7 @@ public class SystemUI {
         };
         SYNC_HANDLER.postDelayed(
                 syncTask,
-                80L
+                120L
         );
     }
 
@@ -486,22 +496,51 @@ public class SystemUI {
         }
     }
 
-    public static void onHeaderColorChanged(android.app.Activity activity, String colorStr) {
-        if (activity == null || colorStr == null) return;
-        final String trimmed = colorStr.replace("\"", "").trim();
-        if (trimmed.isEmpty() || trimmed.equalsIgnoreCase("null")) {
+    private static WebView webViewFromActivity(
+            android.app.Activity activity
+    ) {
+        if (activity instanceof MainActivity) {
+            return ((MainActivity) activity).getActiveWebView();
+        }
+
+        return null;
+    }
+
+    public static void onHeaderColorChanged(
+            android.app.Activity activity,
+            String colorStr
+    ) {
+        if (activity == null
+                || activity.isFinishing()
+                || colorStr == null) {
             return;
         }
+
+        final String trimmed =
+                colorStr.replace("\"", "").trim();
+
+        if (trimmed.isEmpty()
+                || trimmed.equalsIgnoreCase("null")) {
+            return;
+        }
+
         activity.runOnUiThread(() -> {
             try {
-                int parsedColor = parseColorString(activity, trimmed);
-                cancelStatusBarSync();
-                applyHeaderColor(
-                        activity,
-                        parsedColor
-                );
+                WebView currentWebView =
+                        webViewFromActivity(activity);
+
+                if (currentWebView != null) {
+                    scheduleStatusBarSync(
+                            activity,
+                            currentWebView
+                    );
+                }
             } catch (Throwable t) {
-                Log.w(TAG, "Instant header color update failed: " + trimmed, t);
+                Log.w(
+                        TAG,
+                        "Deferred header color synchronization failed.",
+                        t
+                );
             }
         });
     }
@@ -582,4 +621,4 @@ public class SystemUI {
             cancelNavigationBarHide();
         }
     }
-        }
+                                                                                   }
