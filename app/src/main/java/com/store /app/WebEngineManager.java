@@ -129,6 +129,42 @@ public class WebEngineManager {
         "  } catch(e) {}" +
         "})();";
 
+    private static final String IME_VISUAL_VIEWPORT_JS =
+            "(function(){"
+                    + "if(window.__NEXUS_IME_VIEWPORT__)return;"
+                    + "window.__NEXUS_IME_VIEWPORT__=true;"
+                    + "function install(){"
+                    + "if(!window.visualViewport)return;"
+                    + "var root=document.documentElement;"
+                    + "var viewport=window.visualViewport;"
+                    + "var lastBottom=-1;"
+                    + "function sync(){"
+                    + "var keyboardHeight=Math.max(0,"
+                    + "(window.innerHeight||0)-viewport.height-viewport.offsetTop);"
+                    + "if(keyboardHeight===lastBottom)return;"
+                    + "lastBottom=keyboardHeight;"
+                    + "root.style.setProperty("
+                    + "'--nexus-ime-bottom',"
+                    + "keyboardHeight+'px'"
+                    + ");"
+                    + "window.dispatchEvent(new CustomEvent("
+                    + "'nexus:visual-viewport-ime',"
+                    + "{detail:{bottom:keyboardHeight,"
+                    + "height:viewport.height,"
+                    + "offsetTop:viewport.offsetTop}}"
+                    + "));"
+                    + "}"
+                    + "viewport.addEventListener('resize',sync);"
+                    + "viewport.addEventListener('scroll',sync);"
+                    + "window.addEventListener('resize',sync);"
+                    + "sync();"
+                    + "}"
+                    + "if(document.readyState==='loading'){"
+                    + "document.addEventListener('DOMContentLoaded',install,"
+                    + "{once:true});"
+                    + "}else{install();}"
+                    + "})();";
+
     private final Context context;
     private final android.app.Activity activity;
     private final WebView webView;
@@ -305,6 +341,17 @@ public class WebEngineManager {
         });
     }
 
+    private void injectImeVisualViewportLayer(WebView view) {
+        if (view == null) {
+            return;
+        }
+
+        view.evaluateJavascript(
+                IME_VISUAL_VIEWPORT_JS,
+                null
+        );
+    }
+
     private void attachClients() {
         webView.setWebViewClient(new WebViewClient() {
 
@@ -316,7 +363,10 @@ public class WebEngineManager {
 
             @Override
             public void onPageFinished(WebView view, String url) {
-                if (view != null) view.evaluateJavascript(OAUTH_AUTO_INJECTOR_JS, null);
+                if (view != null) {
+                    view.evaluateJavascript(OAUTH_AUTO_INJECTOR_JS, null);
+                    injectImeVisualViewportLayer(view);
+                }
                 try {
                     CookieManager cookieManager = CookieManager.getInstance();
                     cookieManager.flush();
@@ -685,4 +735,4 @@ public class WebEngineManager {
         }
         return launchExternal(uri);
     }
-}
+            }
