@@ -356,9 +356,20 @@ public class WebEngineManager {
         webView.setWebViewClient(new WebViewClient() {
 
             @Override
-            public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
+            public void onPageStarted(
+                    WebView view,
+                    String url,
+                    android.graphics.Bitmap favicon
+            ) {
                 super.onPageStarted(view, url, favicon);
+
                 RoyalPanopticon.recordRequestSent();
+
+                SystemUI.beginPageNavigation(
+                        activity,
+                        view,
+                        url
+                );
             }
 
             @Override
@@ -735,4 +746,4 @@ public class WebEngineManager {
         }
         return launchExternal(uri);
     }
-            }
+    }
