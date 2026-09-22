@@ -94,6 +94,63 @@
     window.NexusTelemetry.initObservers();
     window.NEXUS_REPORT = function() { window.NexusTelemetry.generateReport(); };
 
+    (function installNexusImeViewport() {
+        if (window.__NEXUS_IME_VIEWPORT_LOADER__) {
+            return;
+        }
+
+        window.__NEXUS_IME_VIEWPORT_LOADER__ = true;
+
+        function syncImeViewport() {
+            if (!window.visualViewport) {
+                return;
+            }
+
+            const viewport = window.visualViewport;
+
+            const keyboardHeight = Math.max(
+                0,
+                (window.innerHeight || 0)
+                    - viewport.height
+                    - viewport.offsetTop
+            );
+
+            document.documentElement.style.setProperty(
+                '--nexus-ime-bottom',
+                `${keyboardHeight}px`
+            );
+
+            window.dispatchEvent(
+                new CustomEvent('nexus:visual-viewport-ime', {
+                    detail: {
+                        bottom: keyboardHeight,
+                        height: viewport.height,
+                        offsetTop: viewport.offsetTop
+                    }
+                })
+            );
+        }
+
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener(
+                'resize',
+                syncImeViewport
+            );
+
+            window.visualViewport.addEventListener(
+                'scroll',
+                syncImeViewport
+            );
+        }
+
+        window.addEventListener(
+            'resize',
+            syncImeViewport
+        );
+
+        syncImeViewport();
+    })();
+
     // =========================================================================
     // 👑 ROYAL NUCLEUS IGNITION (كودك الأصلي مغلف بمجسات القياس)
     // =========================================================================
