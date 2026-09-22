@@ -186,11 +186,16 @@ public class RoyalJsBridge {
                         "JS-BridgeChannel"
                 );
 
-                if (activity == null) return;
+                if (activity == null) {
+                    return;
+                }
 
-                SystemUI.scheduleStatusBarSync(
-                        activity,
-                        webView
+                webView.postDelayed(
+                        () -> SystemUI.scheduleStatusBarSync(
+                                activity,
+                                webView
+                        ),
+                        120L
                 );
 
             } catch (Throwable t) {
@@ -265,4 +270,4 @@ public class RoyalJsBridge {
         if (webView == null) return;
         webView.post(() -> webView.evaluateJavascript(script, null));
     }
-}
+            }
