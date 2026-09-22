@@ -35,14 +35,10 @@ public class WebEngineManager {
 
     private static final String TAG = "RoyalEngine";
 
-    // =========================================================
-    // 🛡️ السكربت الاحترافي الخفي للحقن الآلي - يعترض كافة مزودي OAuth تلقائياً مع حماية الأوفلاين الصارمة
-    // =========================================================
     private static final String OAUTH_AUTO_INJECTOR_JS =
         "(function() {" +
         "  if (window.__royalOAuthInjected) return;" +
         "  window.__royalOAuthInjected = true;" +
-        "" +
         "  function isOAuthUrl(url) {" +
         "    if (!url) return false;" +
         "    var l = url.toLowerCase();" +
@@ -56,23 +52,15 @@ public class WebEngineManager {
         "           l.indexOf('twitter.com/i/oauth2') !== -1 ||" +
         "           l.indexOf('auth0.com') !== -1;" +
         "  }" +
-        "" +
         "  function getValidUrl(target) {" +
         "    var href = target.getAttribute('href') || target.getAttribute('data-href') || target.getAttribute('action') || '';" +
         "    if (!href || href === '#' || href.indexOf('javascript:') === 0) return null;" +
-        "    try {" +
-        "      return new URL(href, window.location.href).href;" +
-        "    } catch(e) {" +
-        "      return null;" +
-        "    }" +
+        "    try { return new URL(href, window.location.href).href; } catch(e) { return null; }" +
         "  }" +
-        "" +
         "  function handleOAuthAction(url, e) {" +
         "    if (!navigator.onLine) {" +
         "      if (e) { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); }" +
-        "      if (window.RoyalJsBridge && window.RoyalJsBridge.notifyOfflineClick) {" +
-        "        window.RoyalJsBridge.notifyOfflineClick();" +
-        "      }" +
+        "      if (window.RoyalJsBridge && window.RoyalJsBridge.notifyOfflineClick) { window.RoyalJsBridge.notifyOfflineClick(); }" +
         "      return true;" +
         "    }" +
         "    if (window.RoyalJsBridge) {" +
@@ -82,34 +70,24 @@ public class WebEngineManager {
         "    }" +
         "    return false;" +
         "  }" +
-        "" +
-        "  /* 1. اعتراض النقر المباشر على الأزرار والروابط */" +
         "  document.addEventListener('click', function(e) {" +
         "    var target = e.target.closest('a, button, [role=\"button\"], input[type=\"submit\"], form');" +
         "    if (!target) return;" +
         "    var url = getValidUrl(target);" +
-        "    if (url && isOAuthUrl(url)) {" +
-        "      handleOAuthAction(url, e);" +
-        "    }" +
+        "    if (url && isOAuthUrl(url)) { handleOAuthAction(url, e); }" +
         "  }, true);" +
-        "" +
-        "  /* 2. اعتراض التحويل البرمجي لـ Client-side SDKs */" +
         "  try {" +
         "    var originalAssign = window.location.assign;" +
         "    if (typeof originalAssign === 'function') {" +
         "      window.location.assign = function(url) {" +
-        "        if (isOAuthUrl(url)) {" +
-        "          if (handleOAuthAction(url, null)) return;" +
-        "        }" +
+        "        if (isOAuthUrl(url)) { if (handleOAuthAction(url, null)) return; }" +
         "        return originalAssign.apply(this, arguments);" +
         "      };" +
         "    }" +
         "    var originalReplace = window.location.replace;" +
         "    if (typeof originalReplace === 'function') {" +
         "      window.location.replace = function(url) {" +
-        "        if (isOAuthUrl(url)) {" +
-        "          if (handleOAuthAction(url, null)) return;" +
-        "        }" +
+        "        if (isOAuthUrl(url)) { if (handleOAuthAction(url, null)) return; }" +
         "        return originalReplace.apply(this, arguments);" +
         "      };" +
         "    }" +
@@ -119,9 +97,7 @@ public class WebEngineManager {
         "      var origSet = descriptor.set;" +
         "      Object.defineProperty(window.location, 'href', {" +
         "        set: function(val) {" +
-        "          if (isOAuthUrl(val)) {" +
-        "            if (handleOAuthAction(val, null)) return;" +
-        "          }" +
+        "          if (isOAuthUrl(val)) { if (handleOAuthAction(val, null)) return; }" +
         "          origSet.call(window.location, val);" +
         "        }" +
         "      });" +
@@ -143,26 +119,17 @@ public class WebEngineManager {
                     + "(window.innerHeight||0)-viewport.height-viewport.offsetTop);"
                     + "if(keyboardHeight===lastBottom)return;"
                     + "lastBottom=keyboardHeight;"
-                    + "root.style.setProperty("
-                    + "'--nexus-ime-bottom',"
-                    + "keyboardHeight+'px'"
-                    + ");"
-                    + "window.dispatchEvent(new CustomEvent("
-                    + "'nexus:visual-viewport-ime',"
-                    + "{detail:{bottom:keyboardHeight,"
-                    + "height:viewport.height,"
-                    + "offsetTop:viewport.offsetTop}}"
-                    + "));"
+                    + "root.style.setProperty('--nexus-ime-bottom',keyboardHeight+'px');"
+                    + "window.dispatchEvent(new CustomEvent('nexus:visual-viewport-ime',"
+                    + "{detail:{bottom:keyboardHeight,height:viewport.height,offsetTop:viewport.offsetTop}}));"
                     + "}"
                     + "viewport.addEventListener('resize',sync);"
                     + "viewport.addEventListener('scroll',sync);"
                     + "window.addEventListener('resize',sync);"
                     + "sync();"
                     + "}"
-                    + "if(document.readyState==='loading'){"
-                    + "document.addEventListener('DOMContentLoaded',install,"
-                    + "{once:true});"
-                    + "}else{install();}"
+                    + "if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',install,{once:true});}"
+                    + "else{install();}"
                     + "})();";
 
     private final Context context;
@@ -187,9 +154,7 @@ public class WebEngineManager {
     private CustomTabsSession customTabsSession = null;
     private boolean isCustomTabOpen = false;
 
-    public interface SplashStateChecker {
-        boolean isRemoved();
-    }
+    public interface SplashStateChecker { boolean isRemoved(); }
 
     public WebEngineManager(Context context, WebView webView, View splashOverlay,
                             android.widget.ProgressBar progressBar,
@@ -200,13 +165,8 @@ public class WebEngineManager {
         this.progressBar = progressBar;
         this.markSplashRemoved = markSplashRemoved;
         this.splashChecker = splashChecker;
-
         this.activity = (context instanceof android.app.Activity) ? (android.app.Activity) context : null;
-
-        if (this.webView != null) {
-            this.webView.setBackgroundColor(SystemUI.getDefaultSystemColor(this.context));
-        }
-
+        if (this.webView != null) this.webView.setBackgroundColor(SystemUI.getDefaultSystemColor(this.context));
         this.capabilitiesEngine = new RoyalCapabilitiesEngine(this.activity);
         this.speculativeEngine = new SpeculativeEngine(this.activity, this.webView);
         this.webEngineConfig = new WebEngineConfig(this.context, this.webView, this.activity);
@@ -233,9 +193,7 @@ public class WebEngineManager {
                                     activity.runOnUiThread(() -> webView.postDelayed(() -> {
                                         if (webEngineConfig.getTrustedHost() != null) {
                                             webView.loadUrl(webEngineConfig.getTrustedScheme() + "://" + webEngineConfig.getTrustedHost());
-                                        } else {
-                                            webView.reload();
-                                        }
+                                        } else webView.reload();
                                     }, 300));
                                 }
                             }
@@ -276,11 +234,8 @@ public class WebEngineManager {
     }
 
     public RoyalCapabilitiesEngine getCapabilitiesHandler() { return this.capabilitiesEngine; }
-
     public void predict(String url) { if (speculativeEngine != null) speculativeEngine.predict(url); }
-
     public SpeculativeEngine getSpeculativeEngine() { return this.speculativeEngine; }
-
     public void setSplashStartTime(long startTime) { this.splashStartTime = startTime; }
 
     public void init() {
@@ -342,34 +297,18 @@ public class WebEngineManager {
     }
 
     private void injectImeVisualViewportLayer(WebView view) {
-        if (view == null) {
-            return;
-        }
-
-        view.evaluateJavascript(
-                IME_VISUAL_VIEWPORT_JS,
-                null
-        );
+        if (view == null) return;
+        view.evaluateJavascript(IME_VISUAL_VIEWPORT_JS, null);
     }
 
     private void attachClients() {
         webView.setWebViewClient(new WebViewClient() {
 
             @Override
-            public void onPageStarted(
-                    WebView view,
-                    String url,
-                    android.graphics.Bitmap favicon
-            ) {
+            public void onPageStarted(WebView view, String url, android.graphics.Bitmap favicon) {
                 super.onPageStarted(view, url, favicon);
-
                 RoyalPanopticon.recordRequestSent();
-
-                SystemUI.beginPageNavigation(
-                        activity,
-                        view,
-                        url
-                );
+                SystemUI.beginPageNavigation(activity, view, url);
             }
 
             @Override
@@ -396,12 +335,6 @@ public class WebEngineManager {
                 }
                 OfflineStateManager.getInstance().setPageValid(true);
                 Log.i(TAG, "✅ Page finished successfully. Page is valid.");
-
-                /*
-                 * onPageFinished is only the navigation-completion signal.
-                 * MainActivity will request a VisualStateCallback after this point
-                 * before releasing the Android SplashScreen.
-                 */
                 if (activity instanceof MainActivity) {
                     ((MainActivity) activity).notifyPageFinishedForSplash(view);
                 }
@@ -417,15 +350,72 @@ public class WebEngineManager {
                     }
                     if (activity != null) activity.runOnUiThread(() -> WebEnhancer.apply(view, context));
                     RoyalNetworkEngine.notifyRenderStart();
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && WebViewFeature.isFeatureSupported(WebViewFeature.VISUAL_STATE_CALLBACK)) {
-                        WebViewCompat.postVisualStateCallback(view, System.nanoTime(), new WebViewCompat.VisualStateCallback() {
-                            @Override public void onComplete(long requestId) {
-                                Log.i(TAG, "🎨 Visual state ready for first valid draw.");
-                                RoyalPanopticon.recordMetric("VisualStateReady", System.currentTimeMillis());
-                            }
-                        });
+
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
+                            && WebViewFeature.isFeatureSupported(
+                                    WebViewFeature.VISUAL_STATE_CALLBACK
+                            )) {
+
+                        WebViewCompat.postVisualStateCallback(
+                                view,
+                                System.nanoTime(),
+                                new WebViewCompat.VisualStateCallback() {
+
+                                    @Override
+                                    public void onComplete(long requestId) {
+
+                                        Log.i(
+                                                TAG,
+                                                "🎨 Visual state ready for first valid draw."
+                                        );
+
+                                        RoyalPanopticon.recordMetric(
+                                                "VisualStateReady",
+                                                System.currentTimeMillis()
+                                        );
+
+                                        /*
+                                         * Wait one additional UI frame after the visual-state
+                                         * callback. This gives the page time to commit its
+                                         * final CSS/header background before sampling its color.
+                                         */
+                                        view.postDelayed(
+                                                () -> {
+                                                    if (activity == null
+                                                            || activity.isFinishing()
+                                                            || view.getVisibility() != View.VISIBLE) {
+                                                        return;
+                                                    }
+
+                                                    webEngineConfig.syncStatusBarColor(view);
+                                                },
+                                                120L
+                                        );
+                                    }
+                                }
+                        );
+
+                    } else {
+
+                        /*
+                         * Older WebView implementations do not expose the visual-state
+                         * callback. Delay the color sample so CSS and the visible header
+                         * have a chance to settle.
+                         */
+                        view.postDelayed(
+                                () -> {
+                                    if (activity == null
+                                            || activity.isFinishing()
+                                            || view.getVisibility() != View.VISIBLE) {
+                                        return;
+                                    }
+
+                                    webEngineConfig.syncStatusBarColor(view);
+                                },
+                                180L
+                        );
                     }
-                    webEngineConfig.syncStatusBarColor(view);
+
                     if (NetworkMonitor.isInternetAvailable(context)
                             && !OfflineStateManager.getInstance().isOnErrorPage()
                             && OfflineStateManager.getInstance().isPageValid()) {
@@ -662,7 +652,6 @@ public class WebEngineManager {
     }
 
     public boolean isPageValid() { return OfflineStateManager.getInstance().isPageValid(); }
-
     public boolean isOnErrorPage() { return OfflineStateManager.getInstance().isOnErrorPage(); }
 
     private boolean launchIntentScheme(Uri uri) {
@@ -697,53 +686,91 @@ public class WebEngineManager {
                 || "applepay".equals(normalized);
     }
 
+    private boolean isHttpOrHttps(Uri uri) {
+        if (uri == null || uri.getScheme() == null) {
+            return false;
+        }
+        String scheme = uri.getScheme().toLowerCase(java.util.Locale.ROOT);
+        return "http".equals(scheme) || "https".equals(scheme);
+    }
+
     private boolean handleUriLogic(Uri uri, boolean isMainFrame) {
-        if (uri == null) return false;
+        if (uri == null) {
+            return false;
+        }
+
         if (!NetworkMonitor.isInternetAvailable(context)) {
             OfflineStateManager.getInstance().notifyOfflineClickAttempt();
             return true;
         }
+
         String scheme = uri.getScheme();
-        if (scheme == null) return false;
+
+        if (scheme == null) {
+            return true;
+        }
+
         scheme = scheme.toLowerCase(java.util.Locale.ROOT);
 
+        if (isLogoutUrl(uri)) {
+            Log.i(
+                    TAG,
+                    "🧹 Logout URL detected -> purging native session."
+            );
+
+            clearNativeSession(null);
+
+            /*
+             * Let the WebView continue the same-origin logout request.
+             * For an external logout URL, it will be handled below.
+             */
+        }
+
         /*
-         * Payment and wallet URI schemes must be handled before
-         * same-origin and generic external URL logic.
+         * OAuth must keep its dedicated Custom Tab flow.
+         */
+        if (isSensitiveNavigation(uri)) {
+            return launchSensitiveFlow(uri);
+        }
+
+        /*
+         * Payment and wallet schemes must never be loaded as normal
+         * WebView URLs.
          */
         if (isPaymentExternalScheme(scheme)) {
-            if ("intent".equals(scheme)) return launchIntentScheme(uri);
+            if ("intent".equals(scheme)) {
+                return launchIntentScheme(uri);
+            }
+
             return launchExternal(uri);
         }
 
-        if (isLogoutUrl(uri)) {
-            Log.i(TAG, "🧹 Logout URL detected -> Triggering Native Session Purge for: " + uri);
-            clearNativeSession(null);
+        /*
+         * Non-web schemes are always external.
+         */
+        if (!"http".equals(scheme)
+                && !"https".equals(scheme)) {
+
+            if ("com.store.app.auth".equals(scheme)) {
+                Log.i(
+                        TAG,
+                        "✅ Custom auth scheme handled by RoyalAuthManager."
+                );
+
+                return true;
+            }
+
+            return launchExternal(uri);
+        }
+
+        /*
+         * Exact same-origin HTTP/HTTPS links remain inside WebView.
+         * Cross-origin HTTP/HTTPS links open in Custom Tabs.
+         */
+        if (webEngineConfig.isSameOrigin(uri)) {
             return false;
         }
-        if (webEngineConfig.isSameOrigin(uri)) return false;
-        if (isSensitiveNavigation(uri)) return launchSensitiveFlow(uri);
-        switch (scheme) {
-            case "tel":
-            case "mailto":
-            case "sms":
-            case "smsto":
-            case "geo":
-            case "market":
-            case "whatsapp":
-            case "upi":
-            case "pay":
-            case "paypal":
-            case "alipay":
-            case "gpay":
-            case "applepay":
-                return launchExternal(uri);
-        }
-        if ("http".equals(scheme) || "https".equals(scheme)) return launchExternalWebUrl(uri);
-        if ("com.store.app.auth".equals(scheme)) {
-            Log.i(TAG, "✅ Custom auth scheme detected, handled by RoyalAuthManager.");
-            return true;
-        }
-        return launchExternal(uri);
+
+        return launchExternalWebUrl(uri);
     }
-    }
+                    }
