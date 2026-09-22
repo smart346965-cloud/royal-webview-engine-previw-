@@ -64,6 +64,7 @@ public class MainActivity extends AppCompatActivity {
     private FrameLayout bottomContainer;
     private FrameLayout sidebarContainer;
     private FrameLayout webViewContainer;
+    private View topVisualSurface;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -115,7 +116,7 @@ public class MainActivity extends AppCompatActivity {
             statusBarHeight = getResources().getDimensionPixelSize(resourceId);
         }
 
-        View topVisualSurface = new View(this);
+        topVisualSurface = new View(this);
         topVisualSurface.setId(View.generateViewId());
         topVisualSurface.setTag("TOP_VISUAL_SURFACE");
         topVisualSurface.setBackgroundColor(initialColor);
@@ -129,107 +130,113 @@ public class MainActivity extends AppCompatActivity {
         setContentView(rootContainer);
         rootContainer.addView(topVisualSurface);
 
-        ViewCompat.setOnApplyWindowInsetsListener(rootContainer, (v, insets) -> {
+        ViewCompat.setOnApplyWindowInsetsListener(
+                rootContainer,
+                (v, insets) -> {
 
-            int insetTop = insets.getInsets(
-                    WindowInsetsCompat.Type.statusBars()
-                            | WindowInsetsCompat.Type.displayCutout()
-            ).top;
+                    int insetTop = insets.getInsets(
+                            WindowInsetsCompat.Type.statusBars()
+                                    | WindowInsetsCompat.Type.displayCutout()
+                    ).top;
 
-            if (insetTop != appliedStatusBarInset) {
+                    /*
+                     * The native top surface owns the cutout/status area.
+                     */
+                    if (topVisualSurface != null) {
+                        ViewGroup.LayoutParams surfaceParamsInner =
+                                topVisualSurface.getLayoutParams();
 
-                appliedStatusBarInset = insetTop;
+                        if (surfaceParamsInner != null
+                                && surfaceParamsInner.height != insetTop) {
 
-                ViewGroup.LayoutParams surfaceParamsInner =
-                        topVisualSurface.getLayoutParams();
+                            surfaceParamsInner.height = insetTop;
+                            topVisualSurface.setLayoutParams(surfaceParamsInner);
+                        }
 
-                if (surfaceParamsInner != null
-                        && surfaceParamsInner.height != insetTop) {
+                        topVisualSurface.setVisibility(
+                                insetTop > 0
+                                        ? View.VISIBLE
+                                        : View.INVISIBLE
+                        );
+                    }
 
-                    surfaceParamsInner.height = insetTop;
-                    topVisualSurface.setLayoutParams(surfaceParamsInner);
-                }
+                    /*
+                     * The WebView container owns the safe-area offset.
+                     * The WebView itself must remain MATCH_PARENT inside it.
+                     */
+                    if (webViewContainer != null) {
+                        ViewGroup.LayoutParams rawParams =
+                                webViewContainer.getLayoutParams();
 
-                /*
-                 * The WebView container, not the WebView itself, owns the
-                 * top safe-area offset. This keeps the entire web viewport
-                 * below the camera/cutout area.
-                 */
-                if (webViewContainer != null) {
+                        if (rawParams instanceof ViewGroup.MarginLayoutParams) {
+                            ViewGroup.MarginLayoutParams params =
+                                    (ViewGroup.MarginLayoutParams) rawParams;
 
-                    ViewGroup.LayoutParams rawParams =
-                            webViewContainer.getLayoutParams();
-
-                    if (rawParams instanceof ViewGroup.MarginLayoutParams) {
-
-                        ViewGroup.MarginLayoutParams params =
-                                (ViewGroup.MarginLayoutParams) rawParams;
-
-                        if (params.topMargin != insetTop) {
-                            params.topMargin = insetTop;
-                            webViewContainer.setLayoutParams(params);
+                            if (params.topMargin != insetTop) {
+                                params.topMargin = insetTop;
+                                webViewContainer.setLayoutParams(params);
+                            }
                         }
                     }
-                }
-            }
 
-            boolean navigationVisible =
-                    insets.isVisible(
-                            WindowInsetsCompat.Type.navigationBars()
+                    boolean navigationVisible =
+                            insets.isVisible(
+                                    WindowInsetsCompat.Type.navigationBars()
+                            );
+
+                    SystemUI.onNavigationBarVisibilityChanged(
+                            MainActivity.this,
+                            navigationVisible
                     );
 
-            SystemUI.onNavigationBarVisibilityChanged(
-                    MainActivity.this,
-                    navigationVisible
-            );
+                    int imeBottomInset = insets.getInsets(
+                            WindowInsetsCompat.Type.ime()
+                    ).bottom;
 
-            int imeBottomInset = insets.getInsets(
-                    WindowInsetsCompat.Type.ime()
-            ).bottom;
+                    int navigationBottomInset = insets.getInsets(
+                            WindowInsetsCompat.Type.navigationBars()
+                    ).bottom;
 
-            int navigationBottomInset = insets.getInsets(
-                    WindowInsetsCompat.Type.navigationBars()
-            ).bottom;
+                    boolean imeVisible = insets.isVisible(
+                            WindowInsetsCompat.Type.ime()
+                    );
 
-            boolean imeVisible = insets.isVisible(
-                    WindowInsetsCompat.Type.ime()
-            );
+                    int effectiveBottomInset = imeVisible
+                            ? Math.max(
+                                    imeBottomInset,
+                                    navigationBottomInset
+                            )
+                            : 0;
 
-            /*
-             * The WebView must be resized through its container.
-             * Padding changes the inside of WebView but does not change
-             * the layout viewport used by position: fixed web elements.
-             */
-            int effectiveBottomInset = imeVisible
-                    ? Math.max(imeBottomInset, navigationBottomInset)
-                    : 0;
+                    if (webViewContainer != null
+                            && effectiveBottomInset != appliedImeBottomInset) {
 
-            if (webViewContainer != null
-                    && effectiveBottomInset != appliedImeBottomInset) {
+                        appliedImeBottomInset = effectiveBottomInset;
 
-                appliedImeBottomInset = effectiveBottomInset;
+                        ViewGroup.LayoutParams rawParams =
+                                webViewContainer.getLayoutParams();
 
-                ViewGroup.LayoutParams rawParams =
-                        webViewContainer.getLayoutParams();
+                        if (rawParams instanceof ViewGroup.MarginLayoutParams) {
+                            ViewGroup.MarginLayoutParams params =
+                                    (ViewGroup.MarginLayoutParams) rawParams;
 
-                if (rawParams instanceof ViewGroup.MarginLayoutParams) {
-                    ViewGroup.MarginLayoutParams params =
-                            (ViewGroup.MarginLayoutParams) rawParams;
+                            params.bottomMargin = effectiveBottomInset;
+                            webViewContainer.setLayoutParams(params);
+                            webViewContainer.requestLayout();
 
-                    params.bottomMargin = effectiveBottomInset;
-                    webViewContainer.setLayoutParams(params);
-                    webViewContainer.requestLayout();
+                            dispatchImeInsetToWebView(
+                                    effectiveBottomInset
+                            );
+                        }
+                    }
 
-                    dispatchImeInsetToWebView(effectiveBottomInset);
+                    if (imeVisible) {
+                        ensureFocusedWebInputVisible();
+                    }
+
+                    return insets;
                 }
-            }
-
-            if (imeVisible) {
-                ensureFocusedWebInputVisible();
-            }
-
-            return insets;
-        });
+        );
 
         RoyalWebViewHost.whenStartupReady(() -> initializeWebView(savedInstanceState));
     }
@@ -258,8 +265,6 @@ public class MainActivity extends AppCompatActivity {
                 )
         );
 
-        ViewCompat.requestApplyInsets(rootContainer);
-
         rootContainer.addView(headerContainer, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
@@ -270,6 +275,15 @@ public class MainActivity extends AppCompatActivity {
 
         rootContainer.addView(sidebarContainer, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+
+        /*
+         * Make the native safe-area surface the final top layer.
+         */
+        if (topVisualSurface != null) {
+            topVisualSurface.bringToFront();
+        }
+
+        ViewCompat.requestApplyInsets(rootContainer);
 
         int initialColor = SystemUI.getDefaultSystemColor(this);
         SystemUI.applyKingMode(this, activeWebView, initialColor);
@@ -431,11 +445,6 @@ public class MainActivity extends AppCompatActivity {
         if (activeWebView != null) {
             activeWebView.onResume();
             SystemUI.hideSystemBars(this);
-            SystemUI.restoreHeaderOnResume(this);
-
-            if (System.currentTimeMillis() - splashStartTime >= MIN_SPLASH_TIME) {
-                SystemUI.scheduleStatusBarSync(this, activeWebView);
-            }
         }
 
         if (offlineController != null) offlineController.onResume();
@@ -663,4 +672,4 @@ public class MainActivity extends AppCompatActivity {
             Log.e(TAG, "⚠️ Failed to initialize Native Modules.", t);
         }
     }
-    }
+                                               }
