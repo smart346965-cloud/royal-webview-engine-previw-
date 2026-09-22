@@ -378,8 +378,10 @@ public class MainActivity extends AppCompatActivity {
                         () -> {
                             visualStateReady = true;
                             webViewRevealed = true;
-                            Log.i(TAG, "🎨 First visual state rendered.");
-                            SystemUI.scheduleStatusBarSync(MainActivity.this, activeWebView);
+                            Log.i(
+                                    TAG,
+                                    "🎨 First visual state rendered."
+                            );
                         }
                 );
             } else {
@@ -672,4 +674,5 @@ public class MainActivity extends AppCompatActivity {
             Log.e(TAG, "⚠️ Failed to initialize Native Modules.", t);
         }
     }
-                                               }
+                                     }
+                    
