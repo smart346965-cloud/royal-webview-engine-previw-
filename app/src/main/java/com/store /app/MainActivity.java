@@ -144,31 +144,49 @@ public class MainActivity extends AppCompatActivity {
 
             SystemUI.onNavigationBarVisibilityChanged(MainActivity.this, navigationVisible);
 
-            int imeBottomInset = insets.getInsets(WindowInsetsCompat.Type.ime()).bottom;
-            boolean imeVisible = insets.isVisible(WindowInsetsCompat.Type.ime());
+            int imeBottomInset = insets.getInsets(
+                    WindowInsetsCompat.Type.ime()
+            ).bottom;
 
-            if (activeWebView != null && imeBottomInset != appliedImeBottomInset) {
-                appliedImeBottomInset = imeBottomInset;
-                activeWebView.setPadding(
-                        activeWebView.getPaddingLeft(),
-                        activeWebView.getPaddingTop(),
-                        activeWebView.getPaddingRight(),
-                        imeBottomInset
-                );
+            int navigationBottomInset = insets.getInsets(
+                    WindowInsetsCompat.Type.navigationBars()
+            ).bottom;
+
+            boolean imeVisible = insets.isVisible(
+                    WindowInsetsCompat.Type.ime()
+            );
+
+            /*
+             * The WebView must be resized through its container.
+             * Padding changes the inside of WebView but does not change
+             * the layout viewport used by position: fixed web elements.
+             */
+            int effectiveBottomInset = imeVisible
+                    ? Math.max(imeBottomInset, navigationBottomInset)
+                    : 0;
+
+            if (webViewContainer != null
+                    && effectiveBottomInset != appliedImeBottomInset) {
+
+                appliedImeBottomInset = effectiveBottomInset;
+
+                ViewGroup.LayoutParams rawParams =
+                        webViewContainer.getLayoutParams();
+
+                if (rawParams instanceof ViewGroup.MarginLayoutParams) {
+                    ViewGroup.MarginLayoutParams params =
+                            (ViewGroup.MarginLayoutParams) rawParams;
+
+                    params.bottomMargin = effectiveBottomInset;
+                    webViewContainer.setLayoutParams(params);
+                    webViewContainer.requestLayout();
+
+                    dispatchImeInsetToWebView(effectiveBottomInset);
+                }
             }
 
             if (imeVisible) {
                 ensureFocusedWebInputVisible();
-            }
-
-            if (!imeVisible && activeWebView != null && appliedImeBottomInset != 0) {
-                appliedImeBottomInset = 0;
-                activeWebView.setPadding(
-                        activeWebView.getPaddingLeft(),
-                        activeWebView.getPaddingTop(),
-                        activeWebView.getPaddingRight(),
-                        0
-                );
             }
 
             return insets;
@@ -193,7 +211,12 @@ public class MainActivity extends AppCompatActivity {
         ));
 
         rootContainer.addView(webViewContainer, 0, new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
+                ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT
+        ));
+
+        ViewCompat.requestApplyInsets(rootContainer);
+
         rootContainer.addView(headerContainer, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
@@ -556,32 +579,58 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    private void dispatchImeInsetToWebView(int imeBottomInset) {
+        if (activeWebView == null) {
+            return;
+        }
+
+        String script =
+                "window.dispatchEvent(new CustomEvent('nexus:ime-inset', {"
+                        + "detail:{bottom:"
+                        + imeBottomInset
+                        + "}"
+                        + "}));";
+
+        activeWebView.post(() ->
+                activeWebView.evaluateJavascript(script, null)
+        );
+    }
+
     private void ensureFocusedWebInputVisible() {
-        if (activeWebView == null) return;
+        if (activeWebView == null) {
+            return;
+        }
 
         activeWebView.postDelayed(() -> {
-            if (activeWebView == null || isFinishing() || activeWebView.getUrl() == null) return;
+            if (activeWebView == null
+                    || isFinishing()
+                    || activeWebView.getUrl() == null) {
+                return;
+            }
 
             activeWebView.evaluateJavascript(
                     "(function(){"
                             + "var e=document.activeElement;"
                             + "if(!e)return;"
                             + "var tag=(e.tagName||'').toLowerCase();"
-                            + "var editable=e.isContentEditable;"
+                            + "var editable=e.isContentEditable"
                             + "||tag==='input'"
                             + "||tag==='textarea'"
                             + "||tag==='select';"
-                            + "if(editable){"
+                            + "if(!editable)return;"
+                            + "try{"
                             + "e.scrollIntoView({"
-                            + "block:'center',"
+                            + "block:'nearest',"
                             + "inline:'nearest',"
-                            + "behavior:'smooth'"
+                            + "behavior:'auto'"
                             + "});"
+                            + "}catch(_){"
+                            + "try{e.scrollIntoView(false);}catch(__){}"
                             + "}"
                             + "})();",
                     null
             );
-        }, 120L);
+        }, 160L);
     }
 
     private void loadVIPModules() {
