@@ -188,9 +188,9 @@ public class RoyalJsBridge {
 
                 if (activity == null) return;
 
-                SystemUI.applyInstantHeaderColor(
+                SystemUI.scheduleStatusBarSync(
                         activity,
-                        finalColor
+                        webView
                 );
 
             } catch (Throwable t) {
