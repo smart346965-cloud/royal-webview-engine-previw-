@@ -54,6 +54,9 @@ public class MainActivity extends AppCompatActivity {
     private RoyalAuthManager royalAuthManager;
     private Intent pendingAuthIntent;
     private FrameLayout rootContainer;
+
+    private int appliedStatusBarInset = 0;
+
     private int appliedImeBottomInset = 0;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
@@ -127,22 +130,58 @@ public class MainActivity extends AppCompatActivity {
         rootContainer.addView(topVisualSurface);
 
         ViewCompat.setOnApplyWindowInsetsListener(rootContainer, (v, insets) -> {
+
             int insetTop = insets.getInsets(
                     WindowInsetsCompat.Type.statusBars()
                             | WindowInsetsCompat.Type.displayCutout()
             ).top;
 
-            if (insetTop > 0) {
-                ViewGroup.LayoutParams lp = topVisualSurface.getLayoutParams();
-                if (lp.height != insetTop) {
-                    lp.height = insetTop;
-                    topVisualSurface.setLayoutParams(lp);
+            if (insetTop != appliedStatusBarInset) {
+
+                appliedStatusBarInset = insetTop;
+
+                ViewGroup.LayoutParams surfaceParamsInner =
+                        topVisualSurface.getLayoutParams();
+
+                if (surfaceParamsInner != null
+                        && surfaceParamsInner.height != insetTop) {
+
+                    surfaceParamsInner.height = insetTop;
+                    topVisualSurface.setLayoutParams(surfaceParamsInner);
+                }
+
+                /*
+                 * The WebView container, not the WebView itself, owns the
+                 * top safe-area offset. This keeps the entire web viewport
+                 * below the camera/cutout area.
+                 */
+                if (webViewContainer != null) {
+
+                    ViewGroup.LayoutParams rawParams =
+                            webViewContainer.getLayoutParams();
+
+                    if (rawParams instanceof ViewGroup.MarginLayoutParams) {
+
+                        ViewGroup.MarginLayoutParams params =
+                                (ViewGroup.MarginLayoutParams) rawParams;
+
+                        if (params.topMargin != insetTop) {
+                            params.topMargin = insetTop;
+                            webViewContainer.setLayoutParams(params);
+                        }
+                    }
                 }
             }
 
-            boolean navigationVisible = insets.isVisible(WindowInsetsCompat.Type.navigationBars());
+            boolean navigationVisible =
+                    insets.isVisible(
+                            WindowInsetsCompat.Type.navigationBars()
+                    );
 
-            SystemUI.onNavigationBarVisibilityChanged(MainActivity.this, navigationVisible);
+            SystemUI.onNavigationBarVisibilityChanged(
+                    MainActivity.this,
+                    navigationVisible
+            );
 
             int imeBottomInset = insets.getInsets(
                     WindowInsetsCompat.Type.ime()
@@ -210,10 +249,14 @@ public class MainActivity extends AppCompatActivity {
                 ViewGroup.LayoutParams.MATCH_PARENT
         ));
 
-        rootContainer.addView(webViewContainer, 0, new FrameLayout.LayoutParams(
-                ViewGroup.LayoutParams.MATCH_PARENT,
-                ViewGroup.LayoutParams.MATCH_PARENT
-        ));
+        rootContainer.addView(
+                webViewContainer,
+                0,
+                new FrameLayout.LayoutParams(
+                        ViewGroup.LayoutParams.MATCH_PARENT,
+                        ViewGroup.LayoutParams.MATCH_PARENT
+                )
+        );
 
         ViewCompat.requestApplyInsets(rootContainer);
 
@@ -227,22 +270,6 @@ public class MainActivity extends AppCompatActivity {
 
         rootContainer.addView(sidebarContainer, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
-
-        ViewCompat.setOnApplyWindowInsetsListener(activeWebView, (v, insets) -> {
-            int insetTop = insets.getInsets(WindowInsetsCompat.Type.statusBars()
-                    | WindowInsetsCompat.Type.displayCutout()).top;
-
-            ViewGroup.LayoutParams lp = v.getLayoutParams();
-            if (lp instanceof ViewGroup.MarginLayoutParams) {
-                ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) lp;
-                if (params.topMargin != insetTop) {
-                    params.topMargin = insetTop;
-                    v.setLayoutParams(params);
-                }
-            }
-
-            return insets;
-        });
 
         int initialColor = SystemUI.getDefaultSystemColor(this);
         SystemUI.applyKingMode(this, activeWebView, initialColor);
@@ -291,7 +318,6 @@ public class MainActivity extends AppCompatActivity {
                             webViewRevealed = true;
                             splashPageFinished = true;
                             splashVisualStateReady = true;
-                            SystemUI.syncStatusBarWithWebEarly(MainActivity.this, activeWebView);
                         }
                 );
 
@@ -318,7 +344,6 @@ public class MainActivity extends AppCompatActivity {
                             webViewRevealed = true;
                             splashPageFinished = true;
                             splashVisualStateReady = true;
-                            SystemUI.syncStatusBarWithWebEarly(MainActivity.this, activeWebView);
                         }
                 );
 
@@ -340,7 +365,6 @@ public class MainActivity extends AppCompatActivity {
                             visualStateReady = true;
                             webViewRevealed = true;
                             Log.i(TAG, "🎨 First visual state rendered.");
-                            SystemUI.syncStatusBarWithWebEarly(MainActivity.this, activeWebView);
                             SystemUI.scheduleStatusBarSync(MainActivity.this, activeWebView);
                         }
                 );
@@ -408,7 +432,6 @@ public class MainActivity extends AppCompatActivity {
             activeWebView.onResume();
             SystemUI.hideSystemBars(this);
             SystemUI.restoreHeaderOnResume(this);
-            SystemUI.syncStatusBarWithWebEarly(this, activeWebView);
 
             if (System.currentTimeMillis() - splashStartTime >= MIN_SPLASH_TIME) {
                 SystemUI.scheduleStatusBarSync(this, activeWebView);
@@ -566,16 +589,9 @@ public class MainActivity extends AppCompatActivity {
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
+
         if (hasFocus) {
             SystemUI.hideSystemBars(this);
-            SystemUI.restoreHeaderOnResume(this);
-
-            if (activeWebView != null) {
-                SystemUI.syncStatusBarWithWebEarly(this, activeWebView);
-                if (System.currentTimeMillis() - splashStartTime >= MIN_SPLASH_TIME) {
-                    SystemUI.scheduleStatusBarSync(this, activeWebView);
-                }
-            }
         }
     }
 
@@ -647,4 +663,4 @@ public class MainActivity extends AppCompatActivity {
             Log.e(TAG, "⚠️ Failed to initialize Native Modules.", t);
         }
     }
-            }
+    }
