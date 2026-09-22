@@ -123,7 +123,12 @@ public class WebEngineConfig {
                 WebSettings.MIXED_CONTENT_NEVER_ALLOW
         );
 
-        settings.setSupportMultipleWindows(false);
+        /*
+         * Required by PayPal, 3-D Secure, bank authentication,
+         * and payment providers that use window.open().
+         */
+        settings.setJavaScriptCanOpenWindowsAutomatically(true);
+        settings.setSupportMultipleWindows(true);
         settings.setSupportZoom(false);
 
         /*
@@ -303,4 +308,4 @@ public class WebEngineConfig {
     public int getTrustedPort() {
         return trustedPort;
     }
-                         }
+            }
