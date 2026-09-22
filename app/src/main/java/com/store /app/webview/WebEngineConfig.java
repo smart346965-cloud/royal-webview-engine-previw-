@@ -256,10 +256,8 @@ public class WebEngineConfig {
                             : 80;
         }
 
-        // السماح بـ subdomains
         boolean hostMatches =
-                trusted.equalsIgnoreCase(targetHost)
-                        || targetHost.endsWith("." + trusted);
+                trusted.equalsIgnoreCase(targetHost);
 
         return hostMatches
                 && trustedScheme.equalsIgnoreCase(targetScheme)
@@ -308,4 +306,4 @@ public class WebEngineConfig {
     public int getTrustedPort() {
         return trustedPort;
     }
-            }
+}
