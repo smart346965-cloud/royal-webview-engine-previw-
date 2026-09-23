@@ -346,9 +346,16 @@ public class SystemUI {
 
     private static void syncStatusBarWithWeb(android.app.Activity activity, WebView webView, long requestGeneration, String requestedUrl) {
         if (activity == null || webView == null) return;
-        String defaultHex = (currentHeaderColor != Integer.MIN_VALUE)
-                ? String.format("#%06X", (0xFFFFFF & currentHeaderColor))
-                : (isDarkMode(activity) ? "#12141C" : "#FFFFFF");
+
+        /*
+         * Never use the previous page color as the sampling fallback.
+         * A navigation may still be completing while this callback runs.
+         */
+        String defaultHex =
+                isDarkMode(activity)
+                        ? "#12141C"
+                        : "#FFFFFF";
+
         String jsScript =
                 "(function() {" +
                 "  function normalizeColor(colorStr) {" +
@@ -364,7 +371,7 @@ public class SystemUI {
                 "  function isBlackOrTransparent(colorStr) {" +
                 "    if (!colorStr) return true;" +
                 "    var c = colorStr.toLowerCase().replace(/\\s+/g, '');" +
-                "    return c === 'transparent' || c === 'rgba(0,0,0,0)' || c === '#000000' || c === '#000' || c === 'rgb(0,0,0)';" +
+                "    return c === 'transparent' || c === 'rgba(0,0,0,0)' || c === 'rgba(0, 0, 0, 0)' || c === 'hsla(0,0%,0%,0)';" +
                 "  }" +
                 "  function extractColor() {" +
                 "    var metas = document.querySelectorAll('meta[name=\"theme-color\"]');" +
@@ -398,6 +405,7 @@ public class SystemUI {
                 "  }" +
                 "  return extractColor();" +
                 "})();";
+
         webView.evaluateJavascript(jsScript, value -> {
             if (requestGeneration != syncGeneration) {
                 return;
@@ -545,48 +553,159 @@ public class SystemUI {
         });
     }
 
-    public static void applyInstantHeaderColor(android.app.Activity activity, String colorStr) {
-        if (activity == null || activity.isFinishing() || colorStr == null) {
+    public static void applyInstantHeaderColor(
+            android.app.Activity activity,
+            String colorStr
+    ) {
+        if (activity == null
+                || activity.isFinishing()
+                || colorStr == null) {
             return;
         }
-        final String trimmed = colorStr.replace("\"", "").trim();
-        if (trimmed.isEmpty() || trimmed.equalsIgnoreCase("null")) {
+
+        WebView webView =
+                webViewFromActivity(activity);
+
+        if (webView == null) {
             return;
         }
-        activity.runOnUiThread(() -> {
-            try {
-                int parsedColor = parseColorString(activity, trimmed);
-                cancelStatusBarSync();
-                applyHeaderColor(activity, parsedColor);
-            } catch (Throwable t) {
-                Log.w(TAG, "applyInstantHeaderColor failed: " + trimmed, t);
-            }
-        });
+
+        /*
+         * This method is retained for compatibility only.
+         * It must not directly apply a possibly stale JavaScript color.
+         */
+        scheduleStatusBarSync(
+                activity,
+                webView
+        );
     }
 
-    public static int parseColorString(android.content.Context context, String colorStr) {
-        int defaultColor = getDefaultSystemColor(context);
-        if (colorStr == null) return defaultColor;
-        colorStr = colorStr.replace("\"", "").trim();
-        try {
-            if (colorStr.startsWith("#")) {
-                return Color.parseColor(colorStr);
-            } else if (colorStr.startsWith("rgb")) {
-                String[] parts = colorStr.substring(colorStr.indexOf("(") + 1, colorStr.indexOf(")")).split(",");
-                int r = Integer.parseInt(parts[0].trim());
-                int g = Integer.parseInt(parts[1].trim());
-                int b = Integer.parseInt(parts[2].trim());
-                if (parts.length >= 4) {
-                    float a = Float.parseFloat(parts[3].trim());
-                    int alphaInt = Math.round(a * 255);
-                    return Color.argb(alphaInt, r, g, b);
-                }
-                return Color.rgb(r, g, b);
-            }
-        } catch (Exception e) {
-            Log.w(TAG, "Color parsing fallback triggered for: " + colorStr, e);
+    public static int parseColorString(
+            android.content.Context context,
+            String colorStr
+    ) {
+        int defaultColor =
+                getDefaultSystemColor(context);
+
+        if (colorStr == null) {
+            return defaultColor;
         }
+
+        String value =
+                colorStr.replace("\"", "")
+                        .trim()
+                        .toLowerCase(
+                                java.util.Locale.ROOT
+                        );
+
+        try {
+            if (value.startsWith("#")) {
+                return Color.parseColor(value);
+            }
+
+            if (value.startsWith("rgb")) {
+                int open = value.indexOf('(');
+                int close = value.lastIndexOf(')');
+
+                if (open < 0 || close <= open) {
+                    return defaultColor;
+                }
+
+                String content =
+                        value.substring(open + 1, close)
+                                .replace("/", ",");
+
+                String[] parts =
+                        content.split(",");
+
+                if (parts.length < 3) {
+                    return defaultColor;
+                }
+
+                int red = parseCssChannel(parts[0]);
+                int green = parseCssChannel(parts[1]);
+                int blue = parseCssChannel(parts[2]);
+
+                int alpha = 255;
+
+                if (parts.length >= 4) {
+                    alpha =
+                            parseCssAlpha(parts[3]);
+                }
+
+                return Color.argb(
+                        alpha,
+                        red,
+                        green,
+                        blue
+                );
+            }
+
+            if (value.startsWith("hsl")
+                    || value.startsWith("hsla")) {
+                return defaultColor;
+            }
+
+        } catch (Throwable t) {
+            Log.w(
+                    TAG,
+                    "Color parsing fallback triggered for: "
+                            + colorStr,
+                    t
+            );
+        }
+
         return defaultColor;
+    }
+
+    private static int parseCssChannel(String value) {
+        String normalized =
+                value.trim()
+                        .replace("%", "");
+
+        if (value.contains("%")) {
+            float percentage =
+                    Float.parseFloat(normalized);
+
+            return Math.round(
+                    255f * percentage / 100f
+            );
+        }
+
+        return Math.max(
+                0,
+                Math.min(
+                        255,
+                        Integer.parseInt(normalized)
+                )
+        );
+    }
+
+    private static int parseCssAlpha(String value) {
+        String normalized =
+                value.trim();
+
+        if (normalized.contains("%")) {
+            float percentage =
+                    Float.parseFloat(
+                            normalized.replace("%", "")
+                    );
+
+            return Math.round(
+                    255f * percentage / 100f
+            );
+        }
+
+        float alpha =
+                Float.parseFloat(normalized);
+
+        return Math.max(
+                0,
+                Math.min(
+                        255,
+                        Math.round(alpha * 255f)
+                )
+        );
     }
 
     public static boolean isDarkMode(android.content.Context context) {
@@ -621,4 +740,4 @@ public class SystemUI {
             cancelNavigationBarHide();
         }
     }
-                                                                                   }
+    }
