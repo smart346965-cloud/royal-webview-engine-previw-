@@ -27,6 +27,9 @@ public class WebEngineConfig {
     private String trustedScheme = null;
     private String trustedHost = null;
     private int trustedPort = -1;
+    private String configuredScheme;
+    private String configuredHost;
+    private int configuredPort = -1;
 
     public WebEngineConfig(
             Context context,
@@ -36,6 +39,8 @@ public class WebEngineConfig {
         this.context = context;
         this.webView = webView;
         this.activity = activity;
+
+        initializeConfiguredOrigin();
     }
 
     // =========================================================
@@ -186,6 +191,47 @@ public class WebEngineConfig {
     // =========================================================
     // 🔒 Trusted Origin
     // =========================================================
+    private void initializeConfiguredOrigin() {
+        try {
+            Uri configuredUri =
+                    Uri.parse(
+                            com.store.app.BuildConfig.CLIENT_URL
+                    );
+
+            configuredScheme =
+                    configuredUri.getScheme() != null
+                            ? configuredUri.getScheme()
+                                    .toLowerCase(
+                                            java.util.Locale.ROOT
+                                    )
+                            : null;
+
+            configuredHost =
+                    configuredUri.getHost() != null
+                            ? configuredUri.getHost()
+                                    .toLowerCase(
+                                            java.util.Locale.ROOT
+                                    )
+                            : null;
+
+            if (configuredUri.getPort() != -1) {
+                configuredPort =
+                        configuredUri.getPort();
+            } else if ("https".equals(configuredScheme)) {
+                configuredPort = 443;
+            } else if ("http".equals(configuredScheme)) {
+                configuredPort = 80;
+            }
+
+        } catch (Throwable t) {
+            Log.w(
+                    TAG,
+                    "Configured origin initialization failed.",
+                    t
+            );
+        }
+    }
+
     public void setTrustedOrigin(String url) {
 
         if (url == null) {
@@ -224,44 +270,43 @@ public class WebEngineConfig {
     // 🔥 Same Origin Policy
     // =========================================================
     public boolean isSameOrigin(Uri uri) {
-
-        if (uri == null) {
+        if (uri == null
+                || configuredScheme == null
+                || configuredHost == null) {
             return false;
         }
-
-        if (trustedHost == null) {
-            return false;
-        }
-
-        String targetHost = uri.getHost();
-
-        if (targetHost == null) {
-            return false;
-        }
-
-        targetHost = targetHost.toLowerCase();
-
-        String trusted =
-                trustedHost.toLowerCase();
 
         String targetScheme =
-                uri.getScheme();
+                uri.getScheme() != null
+                        ? uri.getScheme()
+                                .toLowerCase(
+                                        java.util.Locale.ROOT
+                                )
+                        : null;
 
-        int port = uri.getPort();
+        String targetHost =
+                uri.getHost() != null
+                        ? uri.getHost()
+                                .toLowerCase(
+                                        java.util.Locale.ROOT
+                                )
+                        : null;
 
-        if (port == -1) {
-            port =
-                    "https".equals(targetScheme)
-                            ? 443
-                            : 80;
+        if (targetScheme == null
+                || targetHost == null) {
+            return false;
         }
 
-        boolean hostMatches =
-                trusted.equalsIgnoreCase(targetHost);
+        int targetPort =
+                uri.getPort() != -1
+                        ? uri.getPort()
+                        : ("https".equals(targetScheme)
+                                ? 443
+                                : 80);
 
-        return hostMatches
-                && trustedScheme.equalsIgnoreCase(targetScheme)
-                && trustedPort == port;
+        return configuredScheme.equals(targetScheme)
+                && configuredHost.equals(targetHost)
+                && configuredPort == targetPort;
     }
 
     // =========================================================
@@ -306,4 +351,4 @@ public class WebEngineConfig {
     public int getTrustedPort() {
         return trustedPort;
     }
-}
+            }
