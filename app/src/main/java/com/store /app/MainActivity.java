@@ -48,6 +48,8 @@ public class MainActivity extends AppCompatActivity {
     private WebEngineManager engineManager;
     private RoyalCapabilitiesEngine capabilitiesEngine;
     private WebView activeWebView;
+    private boolean webViewInitializationInProgress = false;
+    private boolean webViewInitializationCompleted = false;
     private ProgressBar progressBar;
     private long splashStartTime = 0;
     private OfflineUIController offlineController;
@@ -246,9 +248,30 @@ public class MainActivity extends AppCompatActivity {
     }
 
     private void initializeWebView(Bundle savedInstanceState) {
-        if (isFinishing() || (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1 && isDestroyed())) {
+        if (isFinishing()
+                || (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1
+                && isDestroyed())) {
             return;
         }
+
+        if (webViewInitializationInProgress) {
+            Log.w(
+                    TAG,
+                    "WebView initialization already in progress."
+            );
+            return;
+        }
+
+        if (webViewInitializationCompleted
+                && activeWebView != null) {
+            Log.i(
+                    TAG,
+                    "WebView initialization already completed."
+            );
+            return;
+        }
+
+        webViewInitializationInProgress = true;
 
         RoyalWebViewHost.create(this);
         activeWebView = RoyalWebViewHost.attach(this);
@@ -438,6 +461,9 @@ public class MainActivity extends AppCompatActivity {
         }
 
         loadVIPModules();
+
+        webViewInitializationCompleted = true;
+        webViewInitializationInProgress = false;
     }
 
     public void notifyPageFinishedForSplash(@NonNull WebView view) {
@@ -520,28 +546,42 @@ public class MainActivity extends AppCompatActivity {
             return;
         }
 
+        if (webViewInitializationInProgress) {
+            return;
+        }
+
         mainHandler.post(() -> {
+            if (isFinishing()
+                    || (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1
+                    && isDestroyed())) {
+                return;
+            }
+
             try {
                 if (activeWebView != null) {
-                    activeWebView.stopLoading();
                     activeWebView.onResume();
                     activeWebView.resumeTimers();
 
-                    String url = activeWebView.getUrl();
+                    String url =
+                            activeWebView.getUrl();
 
                     if (url == null
                             || url.trim().isEmpty()
                             || "about:blank".equalsIgnoreCase(url)
                             || url.contains("chromewebdata")) {
 
+                        activeWebView.setVisibility(
+                                View.VISIBLE
+                        );
+
                         activeWebView.loadUrl(
                                 BuildConfig.CLIENT_URL
                         );
+                    } else {
+                        activeWebView.setVisibility(
+                                View.VISIBLE
+                        );
                     }
-
-                    activeWebView.setVisibility(
-                            View.VISIBLE
-                    );
 
                     ViewCompat.requestApplyInsets(
                             rootContainer
@@ -550,7 +590,13 @@ public class MainActivity extends AppCompatActivity {
                     return;
                 }
 
-                initializeWebView(null);
+                /*
+                 * Never call initializeWebView directly.
+                 * The WebView startup barrier owns this transition.
+                 */
+                RoyalWebViewHost.whenStartupReady(
+                        () -> initializeWebView(null)
+                );
 
             } catch (Throwable t) {
                 Log.e(
@@ -559,13 +605,18 @@ public class MainActivity extends AppCompatActivity {
                         t
                 );
 
+                resetWebViewInitializationGuard();
+
                 try {
                     RoyalWebViewHost.destroy();
                 } catch (Throwable ignored) {
                 }
 
                 activeWebView = null;
-                initializeWebView(null);
+
+                RoyalWebViewHost.whenStartupReady(
+                        () -> initializeWebView(null)
+                );
             }
         });
     }
@@ -758,6 +809,11 @@ public class MainActivity extends AppCompatActivity {
         }, 160L);
     }
 
+    private void resetWebViewInitializationGuard() {
+        webViewInitializationInProgress = false;
+        webViewInitializationCompleted = false;
+    }
+
     private void loadVIPModules() {
         try {
             Class<?> moduleInjector = Class.forName("com.store.app.modules.CustomModuleInjector");
@@ -772,4 +828,4 @@ public class MainActivity extends AppCompatActivity {
             Log.e(TAG, "⚠️ Failed to initialize Native Modules.", t);
         }
     }
-            }
+                        }
