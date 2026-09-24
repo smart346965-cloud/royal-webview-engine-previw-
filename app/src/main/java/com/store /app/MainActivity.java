@@ -273,6 +273,21 @@ public class MainActivity extends AppCompatActivity {
 
         webViewInitializationInProgress = true;
 
+        if (!RoyalWebViewHost.isWebViewStartupReady()) {
+            Log.w(
+                    TAG,
+                    "initializeWebView deferred: startup is not ready."
+            );
+
+            webViewInitializationInProgress = false;
+
+            RoyalWebViewHost.whenStartupReady(
+                    () -> initializeWebView(savedInstanceState)
+            );
+
+            return;
+        }
+
         RoyalWebViewHost.create(this);
         activeWebView = RoyalWebViewHost.attach(this);
         activeWebView.setVisibility(View.VISIBLE);
@@ -649,7 +664,9 @@ public class MainActivity extends AppCompatActivity {
             royalAuthManager = null;
         }
 
-        if (!isChangingConfigurations()) RoyalWebViewHost.detach();
+        if (isChangingConfigurations()) {
+            RoyalWebViewHost.detach();
+        }
 
         activeWebView = null;
         super.onDestroy();
@@ -828,4 +845,4 @@ public class MainActivity extends AppCompatActivity {
             Log.e(TAG, "⚠️ Failed to initialize Native Modules.", t);
         }
     }
-                        }
+                            }
