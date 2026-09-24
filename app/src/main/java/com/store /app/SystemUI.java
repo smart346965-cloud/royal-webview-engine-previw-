@@ -220,10 +220,10 @@ public class SystemUI {
             if (updateIcons) {
 
                 /*
-                 * The icon decision must use the exact color that was applied
-                 * to TOP_VISUAL_SURFACE, not the raw page color.
+                 * The icon decision uses the exact final color applied
+                 * to TOP_VISUAL_SURFACE.
                  */
-                boolean lightStatusBarBackground =
+                boolean lightStatusBackground =
                         isColorLight(solidColor);
 
                 WindowInsetsControllerCompat controller =
@@ -233,18 +233,16 @@ public class SystemUI {
                         );
 
                 if (controller != null) {
-
                     /*
-                     * true  = dark icons for a light background
-                     * false = light icons for a dark background
+                     * true  = dark icons on light background
+                     * false = light icons on dark background
                      */
                     controller.setAppearanceLightStatusBars(
-                            lightStatusBarBackground
+                            lightStatusBackground
                     );
 
                     /*
-                     * Navigation-bar appearance is independent from the top
-                     * status-bar surface.
+                     * Navigation bar is independent from the top surface.
                      */
                     controller.setAppearanceLightNavigationBars(
                             isColorLight(
@@ -371,7 +369,7 @@ public class SystemUI {
                 "  function isBlackOrTransparent(colorStr) {" +
                 "    if (!colorStr) return true;" +
                 "    var c = colorStr.toLowerCase().replace(/\\s+/g, '');" +
-                "    return c === 'transparent' || c === 'rgba(0,0,0,0)' || c === 'rgba(0, 0, 0, 0)' || c === 'hsla(0,0%,0%,0)';" +
+                "    return c === 'transparent' || c === 'rgba(0,0,0,0)' || c === 'rgba(0,0,0,0)' || c === 'hsla(0,0%,0%,0)';" +
                 "  }" +
                 "  function extractColor() {" +
                 "    var metas = document.querySelectorAll('meta[name=\"theme-color\"]');" +
@@ -458,8 +456,18 @@ public class SystemUI {
         });
     }
 
-    public static void syncStatusBarWithWebEarly(android.app.Activity activity, WebView webView) {
-        scheduleStatusBarSync(activity, webView);
+    public static void syncStatusBarWithWebEarly(
+            android.app.Activity activity,
+            WebView webView
+    ) {
+        /*
+         * Compatibility method only.
+         * There must be one status-bar synchronization owner.
+         */
+        scheduleStatusBarSync(
+                activity,
+                webView
+        );
     }
 
     public static void scheduleStatusBarSync(android.app.Activity activity, WebView webView) {
@@ -558,26 +566,22 @@ public class SystemUI {
             String colorStr
     ) {
         if (activity == null
-                || activity.isFinishing()
-                || colorStr == null) {
+                || activity.isFinishing()) {
             return;
         }
 
-        WebView webView =
-                webViewFromActivity(activity);
+        if (activity instanceof MainActivity) {
+            WebView webView =
+                    ((MainActivity) activity)
+                            .getActiveWebView();
 
-        if (webView == null) {
-            return;
+            if (webView != null) {
+                scheduleStatusBarSync(
+                        activity,
+                        webView
+                );
+            }
         }
-
-        /*
-         * This method is retained for compatibility only.
-         * It must not directly apply a possibly stale JavaScript color.
-         */
-        scheduleStatusBarSync(
-                activity,
-                webView
-        );
     }
 
     public static int parseColorString(
@@ -740,4 +744,4 @@ public class SystemUI {
             cancelNavigationBarHide();
         }
     }
-    }
+            }
