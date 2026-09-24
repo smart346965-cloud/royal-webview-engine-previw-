@@ -499,9 +499,11 @@ public class SystemUI {
                     scheduledUrl
             );
         };
+        
+        // --- التعديل هنا: تم تغيير الرقم من 120L إلى 3500L (3.5 ثوانٍ) ---
         SYNC_HANDLER.postDelayed(
                 syncTask,
-                120L
+                3500L
         );
     }
 
@@ -744,4 +746,4 @@ public class SystemUI {
             cancelNavigationBarHide();
         }
     }
-            }
+                        }
