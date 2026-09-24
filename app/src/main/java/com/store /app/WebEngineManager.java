@@ -703,15 +703,14 @@ public class WebEngineManager {
         }
 
         /*
-         * OAuth remains on its dedicated Custom Tab flow.
+         * OAuth keeps its dedicated Custom Tab flow.
          */
         if (isSensitiveNavigation(uri)) {
             return launchSensitiveFlow(uri);
         }
 
         /*
-         * Wallet/payment application schemes are never loaded inside
-         * the normal WebView.
+         * Payment/application schemes never load in the normal WebView.
          */
         if (isPaymentExternalScheme(scheme)) {
             if ("intent".equals(scheme)) {
@@ -721,22 +720,12 @@ public class WebEngineManager {
             return launchExternal(uri);
         }
 
-        /*
-         * Custom OAuth callback scheme must be consumed by the
-         * Activity/RoyalAuthManager.
-         */
         if ("com.store.app.auth".equals(scheme)) {
-            Log.i(
-                    TAG,
-                    "✅ Custom auth scheme delegated to RoyalAuthManager."
-            );
-
             return true;
         }
 
         /*
-         * Telephone, mail, maps, marketplace, WhatsApp, and all
-         * other non-web schemes are external.
+         * Non-HTTP schemes are external.
          */
         if (!"http".equals(scheme)
                 && !"https".equals(scheme)) {
@@ -744,20 +733,20 @@ public class WebEngineManager {
         }
 
         /*
-         * Logout cleanup is allowed, but does not decide navigation.
-         */
-        if (isLogoutUrl(uri)) {
-            clearNativeSession(null);
-        }
-
-        /*
-         * Only the exact configured origin stays in WebView.
-         * Any other HTTP/HTTPS origin opens in Custom Tabs.
+         * Keep only the exact configured CLIENT_URL origin inside
+         * the application WebView.
          */
         if (webEngineConfig.isSameOrigin(uri)) {
+            if (isLogoutUrl(uri)) {
+                clearNativeSession(null);
+            }
+
             return false;
         }
 
+        /*
+         * Every different HTTP/HTTPS origin goes to Custom Tabs.
+         */
         return launchExternalWebUrl(uri);
     }
-                            }
+            }
