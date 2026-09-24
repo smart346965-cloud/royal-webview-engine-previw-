@@ -356,41 +356,30 @@ public class WebEngineManager {
                                     WebViewFeature.VISUAL_STATE_CALLBACK
                             )) {
 
+                        final String committedUrl = url;
+
                         WebViewCompat.postVisualStateCallback(
                                 view,
                                 System.nanoTime(),
-                                new WebViewCompat.VisualStateCallback() {
+                                requestId -> view.postDelayed(
+                                        () -> {
+                                            if (activity == null
+                                                    || activity.isFinishing()
+                                                    || view.getVisibility() != View.VISIBLE) {
+                                                return;
+                                            }
 
-                                    @Override
-                                    public void onComplete(long requestId) {
-
-                                        Log.i(
-                                                TAG,
-                                                "🎨 Visual state ready for first valid draw."
-                                        );
-
-                                        RoyalPanopticon.recordMetric(
-                                                "VisualStateReady",
-                                                System.currentTimeMillis()
-                                        );
-
-                                        view.postDelayed(
-                                                () -> {
-                                                    if (activity == null
-                                                            || activity.isFinishing()
-                                                            || view.getVisibility() != View.VISIBLE) {
-                                                        return;
-                                                    }
-
-                                                    webEngineConfig.syncStatusBarColor(view);
-                                                },
-                                                120L
-                                        );
-                                    }
-                                }
+                                            if (committedUrl.equals(view.getUrl())) {
+                                                webEngineConfig.syncStatusBarColor(view);
+                                            }
+                                        },
+                                        180L
+                                )
                         );
 
                     } else {
+
+                        final String committedUrl = url;
 
                         view.postDelayed(
                                 () -> {
@@ -400,9 +389,11 @@ public class WebEngineManager {
                                         return;
                                     }
 
-                                    webEngineConfig.syncStatusBarColor(view);
+                                    if (committedUrl.equals(view.getUrl())) {
+                                        webEngineConfig.syncStatusBarColor(view);
+                                    }
                                 },
-                                180L
+                                220L
                         );
                     }
 
@@ -769,4 +760,4 @@ public class WebEngineManager {
 
         return launchExternalWebUrl(uri);
     }
-                }
+                            }
