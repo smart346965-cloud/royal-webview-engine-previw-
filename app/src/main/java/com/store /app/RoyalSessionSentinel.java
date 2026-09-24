@@ -447,6 +447,20 @@ public final class RoyalSessionSentinel {
             return false;
         }
 
+        if (!stateFile.canRead()
+                || stateFile.length() <= 0
+                || stateFile.length() > 8L * 1024L * 1024L) {
+
+            Log.w(
+                    TAG,
+                    "Stored WebView state is invalid or too large."
+            );
+
+            isResurrecting = false;
+            hideGhostOverlay();
+            return false;
+        }
+
         isResurrecting = true;
 
         if (snapshotFile.exists()) {
@@ -477,9 +491,30 @@ public final class RoyalSessionSentinel {
 
                     try {
 
-                        webView.restoreState(
-                                restoredBundle
-                        );
+                        webView.restoreState(restoredBundle);
+
+                        String restoredUrl =
+                                webView.getUrl();
+
+                        if (restoredUrl == null
+                                || restoredUrl.trim().isEmpty()
+                                || "about:blank".equalsIgnoreCase(restoredUrl)
+                                || restoredUrl.contains("chromewebdata")) {
+
+                            Log.w(
+                                    TAG,
+                                    "Restored state produced an unusable WebView URL."
+                            );
+
+                            isResurrecting = false;
+                            hideGhostOverlay();
+
+                            webView.loadUrl(
+                                    BuildConfig.CLIENT_URL
+                            );
+
+                            return;
+                        }
 
                         frozenState =
                                 restoredBundle;
@@ -548,7 +583,7 @@ public final class RoyalSessionSentinel {
                     isResurrecting = false;
 
                 },
-                80L
+                180L
         );
     }
 
@@ -1175,4 +1210,4 @@ public final class RoyalSessionSentinel {
 
         return lastUrl;
     }
-    }
+                }
