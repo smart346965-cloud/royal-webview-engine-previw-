@@ -71,26 +71,35 @@ public final class RoyalWebViewHost {
         Log.e(TAG, "❌ WebView startup barrier FAILED.", error);
     }
 
+    public static synchronized boolean isWebViewStartupReady() {
+        return webViewStartupReady;
+    }
+
+    public static synchronized boolean hasWebViewStartupFailed() {
+        return webViewStartupFailure != null;
+    }
+
     public static void whenStartupReady(Runnable listener) {
+        if (listener == null) {
+            return;
+        }
 
         boolean runNow = false;
 
         synchronized (RoyalWebViewHost.class) {
-
             if (webViewStartupReady) {
                 runNow = true;
 
             } else if (webViewStartupFailure != null) {
-
                 Log.e(
                         TAG,
-                        "WebView startup previously failed; listener not executed."
+                        "WebView startup failed; callback will not run.",
+                        webViewStartupFailure
                 );
 
                 return;
 
             } else {
-
                 startupListeners.add(listener);
             }
         }
@@ -154,7 +163,7 @@ public final class RoyalWebViewHost {
     // 🚀 إقلاع النواة (create)
     // =========================================================
 
-    public static synchronized void create(Activity activity) {
+    public static synchronized boolean create(Activity activity) {
         if (Looper.myLooper() != Looper.getMainLooper()) {
             throw new IllegalStateException(
                     "RoyalWebViewHost.create() must run on Main Looper."
@@ -162,13 +171,16 @@ public final class RoyalWebViewHost {
         }
 
         if (!webViewStartupReady) {
-            throw new IllegalStateException(
-                    "WebView startup is not complete yet."
+            Log.w(
+                    TAG,
+                    "WebView startup is not ready; creation deferred."
             );
+
+            return false;
         }
 
         if (webViewInstance != null && isInitialized) {
-            return;
+            return true;
         }
 
         try {
@@ -226,6 +238,8 @@ public final class RoyalWebViewHost {
                     "✅ Production WebView created, attached-visible, ready for rendering."
             );
 
+            return true;
+
         } catch (Throwable t) {
 
             isInitialized = false;
@@ -238,7 +252,7 @@ public final class RoyalWebViewHost {
                     t
             );
 
-            throw t;
+            return false;
         }
     }
 
@@ -299,7 +313,11 @@ public final class RoyalWebViewHost {
 
     public static synchronized WebView attach(Activity activity) {
         if (!isInitialized || webViewInstance == null) {
-            create(activity);
+            boolean created = create(activity);
+
+            if (!created || webViewInstance == null) {
+                return null;
+            }
         }
 
         if (contextWrapper != null) {
@@ -439,4 +457,4 @@ public final class RoyalWebViewHost {
     public static WebView getWebView() {
         return webViewInstance;
     }
-    }
+                    }
