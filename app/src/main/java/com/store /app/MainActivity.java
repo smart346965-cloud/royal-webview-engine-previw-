@@ -339,8 +339,33 @@ public class MainActivity extends AppCompatActivity {
                         }
                 );
 
-                restored = true;
-                isPageLoaded = true;
+                String restoredUrl =
+                        activeWebView.getUrl();
+
+                if (restoredUrl != null
+                        && !restoredUrl.trim().isEmpty()
+                        && !"about:blank".equalsIgnoreCase(restoredUrl)
+                        && !restoredUrl.contains("chromewebdata")) {
+
+                    restored = true;
+                    isPageLoaded = true;
+
+                } else {
+                    Log.w(
+                            TAG,
+                            "Restored WebView state has no usable URL. "
+                                    + "Falling back to CLIENT_URL."
+                    );
+
+                    activeWebView.clearHistory();
+                    activeWebView.loadUrl(
+                            BuildConfig.CLIENT_URL
+                    );
+
+                    restored = true;
+                    isPageLoaded = true;
+                }
+
                 Log.i(TAG, "🔄 WebView restored from Activity state.");
             } catch (Throwable t) {
                 Log.w(TAG, "WebView restoreState failed.", t);
@@ -444,36 +469,105 @@ public class MainActivity extends AppCompatActivity {
         super.onPause();
     }
 
+    private boolean isWebViewUsable() {
+        if (activeWebView == null) {
+            return false;
+        }
+
+        if (activeWebView.getParent() == null) {
+            return false;
+        }
+
+        if (activeWebView.getVisibility() != View.VISIBLE) {
+            return false;
+        }
+
+        String url = activeWebView.getUrl();
+
+        return url != null
+                && !url.trim().isEmpty()
+                && !"about:blank".equalsIgnoreCase(url)
+                && !url.contains("chromewebdata");
+    }
+
     @Override
     protected void onResume() {
         super.onResume();
 
-        if (activeWebView != null) {
-            activeWebView.onResume();
-            SystemUI.hideSystemBars(this);
+        SystemUI.hideSystemBars(this);
+
+        if (offlineController != null) {
+            offlineController.onResume();
         }
 
-        if (offlineController != null) offlineController.onResume();
+        if (activeWebView == null) {
+            recreateWebViewAfterResume();
+            return;
+        }
 
-        if (!isPageLoaded && activeWebView != null && activeWebView.getUrl() == null) {
-            activeWebView.loadUrl(BuildConfig.CLIENT_URL);
-            isPageLoaded = true;
+        activeWebView.onResume();
+        activeWebView.resumeTimers();
 
-            if (WebViewFeature.isFeatureSupported(WebViewFeature.VISUAL_STATE_CALLBACK)) {
-                RoyalWebViewHost.revealWhenVisualStateReady(
-                        activeWebView,
-                        System.nanoTime(),
-                        () -> {
-                            visualStateReady = true;
-                            webViewRevealed = true;
-                        }
+        if (!isWebViewUsable()) {
+            recreateWebViewAfterResume();
+        }
+    }
+
+    private void recreateWebViewAfterResume() {
+        if (isFinishing()
+                || (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1
+                && isDestroyed())) {
+            return;
+        }
+
+        mainHandler.post(() -> {
+            try {
+                if (activeWebView != null) {
+                    activeWebView.stopLoading();
+                    activeWebView.onResume();
+                    activeWebView.resumeTimers();
+
+                    String url = activeWebView.getUrl();
+
+                    if (url == null
+                            || url.trim().isEmpty()
+                            || "about:blank".equalsIgnoreCase(url)
+                            || url.contains("chromewebdata")) {
+
+                        activeWebView.loadUrl(
+                                BuildConfig.CLIENT_URL
+                        );
+                    }
+
+                    activeWebView.setVisibility(
+                            View.VISIBLE
+                    );
+
+                    ViewCompat.requestApplyInsets(
+                            rootContainer
+                    );
+
+                    return;
+                }
+
+                initializeWebView(null);
+
+            } catch (Throwable t) {
+                Log.e(
+                        TAG,
+                        "WebView resume recovery failed.",
+                        t
                 );
-            } else {
-                activeWebView.setVisibility(View.VISIBLE);
-                visualStateReady = true;
-                webViewRevealed = true;
+
+                try {
+                    RoyalWebViewHost.destroy();
+                } catch (Throwable ignored) {
+                }
+
+                activeWebView = null;
+                initializeWebView(null);
             }
-        }
+        });
     }
 
     @Override
@@ -678,4 +772,4 @@ public class MainActivity extends AppCompatActivity {
             Log.e(TAG, "⚠️ Failed to initialize Native Modules.", t);
         }
     }
-                              }
+            }
