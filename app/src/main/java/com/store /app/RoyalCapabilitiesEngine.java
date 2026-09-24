@@ -74,6 +74,7 @@ public class RoyalCapabilitiesEngine {
      */
     private FrameLayout paymentPopupContainer;
     private WebView paymentPopupWebView;
+    private boolean paymentPopupCommitted;
 
     public RoyalCapabilitiesEngine(Activity activity) {
         this.activity = activity;
@@ -176,10 +177,76 @@ public class RoyalCapabilitiesEngine {
     // 2. PAYMENT POPUP WEBVIEW
     // =========================================================
 
+    private boolean isPaymentOrAuthenticationHost(String host) {
+        if (host == null) {
+            return false;
+        }
+
+        String normalized =
+                host.toLowerCase(
+                        Locale.ROOT
+                );
+
+        return normalized.equals("paypal.com")
+                || normalized.endsWith(".paypal.com")
+                || normalized.equals("stripe.com")
+                || normalized.endsWith(".stripe.com")
+                || normalized.equals("checkout.com")
+                || normalized.endsWith(".checkout.com")
+                || normalized.equals("tap.company")
+                || normalized.endsWith(".tap.company")
+                || normalized.equals("moyasar.com")
+                || normalized.endsWith(".moyasar.com")
+                || normalized.contains("3ds")
+                || normalized.contains("secure");
+    }
+
+    private boolean launchExternalHttpInCustomTab(Uri uri) {
+        if (activity == null || uri == null) {
+            return true;
+        }
+
+        try {
+            CustomTabsIntent customTabsIntent =
+                    new CustomTabsIntent.Builder()
+                            .setShowTitle(true)
+                            .build();
+
+            customTabsIntent.launchUrl(
+                    activity,
+                    uri
+            );
+
+            return true;
+
+        } catch (Throwable t) {
+            Log.w(
+                    TAG,
+                    "Custom Tab launch failed; using browser fallback.",
+                    t
+            );
+
+            try {
+                Intent intent =
+                        new Intent(
+                                Intent.ACTION_VIEW,
+                                uri
+                        );
+
+                activity.startActivity(intent);
+            } catch (Throwable ignored) {
+            }
+
+            return true;
+        }
+    }
+
     private WebView createPaymentPopup(WebView parentWebView) {
         if (activity == null || activity.isFinishing() || activity.isDestroyed()) return null;
 
         closePaymentPopup();
+
+        paymentPopupCommitted = false;
 
         paymentPopupContainer = new FrameLayout(activity);
         paymentPopupContainer.setBackgroundColor(android.graphics.Color.WHITE);
@@ -204,24 +271,89 @@ public class RoyalCapabilitiesEngine {
             popupSettings.setUserAgentString(parentUserAgent);
         }
 
-        paymentPopupWebView.setWebViewClient(new WebViewClient() {
-            @Override
-            public boolean shouldOverrideUrlLoading(WebView view, android.webkit.WebResourceRequest request) {
-                if (request == null || request.getUrl() == null) return false;
-                Uri uri = request.getUrl();
-                if ("http".equalsIgnoreCase(uri.getScheme()) || "https".equalsIgnoreCase(uri.getScheme())) return false;
-                return launchPaymentExternalUri(uri);
-            }
+        paymentPopupWebView.setWebViewClient(
+                new WebViewClient() {
 
-            @SuppressWarnings("deprecation")
-            @Override
-            public boolean shouldOverrideUrlLoading(WebView view, String url) {
-                if (url == null || url.trim().isEmpty()) return false;
-                Uri uri = Uri.parse(url);
-                if ("http".equalsIgnoreCase(uri.getScheme()) || "https".equalsIgnoreCase(uri.getScheme())) return false;
-                return launchPaymentExternalUri(uri);
-            }
-        });
+                    @Override
+                    public boolean shouldOverrideUrlLoading(
+                            WebView view,
+                            android.webkit.WebResourceRequest request
+                    ) {
+                        if (request == null
+                                || request.getUrl() == null) {
+                            return false;
+                        }
+
+                        Uri uri = request.getUrl();
+                        String scheme = uri.getScheme();
+
+                        if (scheme == null) {
+                            return true;
+                        }
+
+                        scheme = scheme.toLowerCase(
+                                Locale.ROOT
+                        );
+
+                        if ("http".equals(scheme)
+                                || "https".equals(scheme)) {
+
+                            if (isPaymentOrAuthenticationHost(
+                                    uri.getHost()
+                            )) {
+                                paymentPopupCommitted = true;
+                                return false;
+                            }
+
+                            closePaymentPopup();
+                            return launchExternalHttpInCustomTab(
+                                    uri
+                            );
+                        }
+
+                        return launchPaymentExternalUri(uri);
+                    }
+
+                    @SuppressWarnings("deprecation")
+                    @Override
+                    public boolean shouldOverrideUrlLoading(
+                            WebView view,
+                            String url
+                    ) {
+                        if (url == null
+                                || url.trim().isEmpty()) {
+                            return false;
+                        }
+
+                        Uri uri = Uri.parse(url);
+                        String scheme = uri.getScheme();
+
+                        if (scheme == null) {
+                            return true;
+                        }
+
+                        scheme = scheme.toLowerCase(
+                                Locale.ROOT
+                        );
+
+                        if ("http".equals(scheme)
+                                || "https".equals(scheme)) {
+
+                            if (isPaymentOrAuthenticationHost(
+                                    uri.getHost()
+                            )) {
+                                paymentPopupCommitted = true;
+                                return false;
+                            }
+
+                            closePaymentPopup();
+                            return launchExternalHttpInCustomTab(uri);
+                        }
+
+                        return launchPaymentExternalUri(uri);
+                    }
+                }
+        );
 
         paymentPopupWebView.setWebChromeClient(buildChromeClient(null));
 
@@ -302,6 +434,7 @@ public class RoyalCapabilitiesEngine {
             if (parent != null) parent.removeView(paymentPopupContainer);
             paymentPopupContainer = null;
         }
+        paymentPopupCommitted = false;
     }
 
     // =========================================================
@@ -601,4 +734,4 @@ public class RoyalCapabilitiesEngine {
         closePaymentPopup();
         clearPendingDownload();
     }
-            }
+                            }
