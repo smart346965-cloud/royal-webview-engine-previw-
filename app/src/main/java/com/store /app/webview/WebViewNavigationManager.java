@@ -6,16 +6,9 @@ import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
 import android.net.Uri;
-import android.os.Build;
-import android.os.Bundle;
-import android.view.View;
 import android.util.Log;
 import android.webkit.CookieManager;
-import android.webkit.WebResourceError;
-import android.webkit.WebResourceRequest;
-import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
-import android.webkit.WebViewClient;
 
 import androidx.annotation.NonNull;
 import androidx.browser.customtabs.CustomTabColorSchemeParams;
@@ -24,28 +17,11 @@ import androidx.browser.customtabs.CustomTabsClient;
 import androidx.browser.customtabs.CustomTabsIntent;
 import androidx.browser.customtabs.CustomTabsServiceConnection;
 import androidx.browser.customtabs.CustomTabsSession;
-import androidx.webkit.Navigation;
-import androidx.webkit.NavigationListener;
-import androidx.webkit.Page;
-import androidx.webkit.WebViewCompat;
-import androidx.webkit.WebViewFeature;
 
-import com.store.app.BuildConfig;
-import com.store.app.MainActivity;
 import com.store.app.NetworkMonitor;
-import com.store.app.RoyalNetworkEngine;
-import com.store.app.RoyalPanopticon;
-import com.store.app.RoyalWebViewHost;
-import com.store.app.SystemUI;
-import com.store.app.WebEnhancer;
 import com.store.app.offline.OfflineStateManager;
 
-import java.io.ByteArrayInputStream;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
-import java.util.HashMap;
 import java.util.Locale;
-import java.util.Map;
 
 public final class WebViewNavigationManager {
 
@@ -55,24 +31,21 @@ public final class WebViewNavigationManager {
     private final Activity activity;
     private final WebView webView;
     private final WebEngineConfig webEngineConfig;
-    private final SpeculativeEngine speculativeEngine;
 
-    private CustomTabsClient customTabsClient = null;
-    private CustomTabsSession customTabsSession = null;
+    private CustomTabsClient customTabsClient;
+    private CustomTabsSession customTabsSession;
     private boolean isCustomTabOpen = false;
 
     public WebViewNavigationManager(
             Context context,
             Activity activity,
             WebView webView,
-            WebEngineConfig webEngineConfig,
-            SpeculativeEngine speculativeEngine
+            WebEngineConfig webEngineConfig
     ) {
         this.context = context;
         this.activity = activity;
         this.webView = webView;
         this.webEngineConfig = webEngineConfig;
-        this.speculativeEngine = speculativeEngine;
     }
 
     private static final String OAUTH_AUTO_INJECTOR_JS =
@@ -81,7 +54,7 @@ public final class WebViewNavigationManager {
             "  window.__royalOAuthInjected = true;" +
             "  function isOAuthUrl(url) {" +
             "    if (!url) return false;" +
-            "    var l = url.toLowerCase();" +
+            "    var l = String(url).toLowerCase();" +
             "    return l.indexOf('accounts.google.com') !== -1 ||" +
             "           l.indexOf('appleid.apple.com') !== -1 ||" +
             "           l.indexOf('facebook.com/v') !== -1 ||" +
@@ -100,10 +73,12 @@ public final class WebViewNavigationManager {
             "  function handleOAuthAction(url, e) {" +
             "    if (!navigator.onLine) {" +
             "      if (e) { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); }" +
-            "      if (window.RoyalJsBridge && window.RoyalJsBridge.notifyOfflineClick) { window.RoyalJsBridge.notifyOfflineClick(); }" +
+            "      if (window.RoyalJsBridge && window.RoyalJsBridge.notifyOfflineClick) {" +
+            "        window.RoyalJsBridge.notifyOfflineClick();" +
+            "      }" +
             "      return true;" +
             "    }" +
-            "    if (window.RoyalJsBridge) {" +
+            "    if (window.RoyalJsBridge && window.RoyalJsBridge.startOAuth) {" +
             "      if (e) { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); }" +
             "      window.RoyalJsBridge.startOAuth(url);" +
             "      return true;" +
@@ -114,20 +89,20 @@ public final class WebViewNavigationManager {
             "    var target = e.target.closest('a, button, [role=\"button\"], input[type=\"submit\"], form');" +
             "    if (!target) return;" +
             "    var url = getValidUrl(target);" +
-            "    if (url && isOAuthUrl(url)) { handleOAuthAction(url, e); }" +
+            "    if (url && isOAuthUrl(url)) handleOAuthAction(url, e);" +
             "  }, true);" +
             "  try {" +
             "    var originalAssign = window.location.assign;" +
             "    if (typeof originalAssign === 'function') {" +
             "      window.location.assign = function(url) {" +
-            "        if (isOAuthUrl(url)) { if (handleOAuthAction(url, null)) return; }" +
+            "        if (isOAuthUrl(url) && handleOAuthAction(url, null)) return;" +
             "        return originalAssign.apply(this, arguments);" +
             "      };" +
             "    }" +
             "    var originalReplace = window.location.replace;" +
             "    if (typeof originalReplace === 'function') {" +
             "      window.location.replace = function(url) {" +
-            "        if (isOAuthUrl(url)) { if (handleOAuthAction(url, null)) return; }" +
+            "        if (isOAuthUrl(url) && handleOAuthAction(url, null)) return;" +
             "        return originalReplace.apply(this, arguments);" +
             "      };" +
             "    }" +
@@ -136,8 +111,9 @@ public final class WebViewNavigationManager {
             "    if (descriptor && descriptor.set) {" +
             "      var origSet = descriptor.set;" +
             "      Object.defineProperty(window.location, 'href', {" +
+            "        configurable: true," +
             "        set: function(val) {" +
-            "          if (isOAuthUrl(val)) { if (handleOAuthAction(val, null)) return; }" +
+            "          if (isOAuthUrl(val) && handleOAuthAction(val, null)) return;" +
             "          origSet.call(window.location, val);" +
             "        }" +
             "      });" +
@@ -145,32 +121,14 @@ public final class WebViewNavigationManager {
             "  } catch(e) {}" +
             "})();";
 
-    private static final String IME_VISUAL_VIEWPORT_JS =
-            "(function(){"
-                    + "if(window.__NEXUS_IME_VIEWPORT__)return;"
-                    + "window.__NEXUS_IME_VIEWPORT__=true;"
-                    + "function install(){"
-                    + "if(!window.visualViewport)return;"
-                    + "var root=document.documentElement;"
-                    + "var viewport=window.visualViewport;"
-                    + "var lastBottom=-1;"
-                    + "function sync(){"
-                    + "var keyboardHeight=Math.max(0,"
-                    + "(window.innerHeight||0)-viewport.height-viewport.offsetTop);"
-                    + "if(keyboardHeight===lastBottom)return;"
-                    + "lastBottom=keyboardHeight;"
-                    + "root.style.setProperty('--nexus-ime-bottom',keyboardHeight+'px');"
-                    + "window.dispatchEvent(new CustomEvent('nexus:visual-viewport-ime',"
-                    + "{detail:{bottom:keyboardHeight,height:viewport.height,offsetTop:viewport.offsetTop}}));"
-                    + "}"
-                    + "viewport.addEventListener('resize',sync);"
-                    + "viewport.addEventListener('scroll',sync);"
-                    + "window.addEventListener('resize',sync);"
-                    + "sync();"
-                    + "}"
-                    + "if(document.readyState==='loading'){document.addEventListener('DOMContentLoaded',install,{once:true});}"
-                    + "else{install();}"
-                    + "})();";
+    /**
+     * Called by WebEngineManager.onPageFinished().
+     */
+    public void injectOAuthScript(WebView view) {
+        if (view != null) {
+            view.evaluateJavascript(OAUTH_AUTO_INJECTOR_JS, null);
+        }
+    }
 
     public void setupCustomTabsSession() {
         if (activity == null) return;
@@ -196,7 +154,7 @@ public final class WebViewNavigationManager {
                                         @Override
                                         public void onNavigationEvent(
                                                 int navigationEvent,
-                                                Bundle extras
+                                                android.os.Bundle extras
                                         ) {
                                             super.onNavigationEvent(
                                                     navigationEvent,
@@ -206,27 +164,30 @@ public final class WebViewNavigationManager {
                                             if (navigationEvent
                                                     == CustomTabsCallback.TAB_HIDDEN
                                                     && isCustomTabOpen) {
-
                                                 isCustomTabOpen = false;
 
                                                 Log.i(
                                                         TAG,
-                                                        "🔄 Custom Tab hidden -> Triggering WebView Session Refresh"
+                                                        "Custom Tab hidden; refreshing WebView session."
                                                 );
 
                                                 if (activity != null && webView != null) {
                                                     activity.runOnUiThread(() ->
                                                             webView.postDelayed(() -> {
-                                                                if (webEngineConfig.getTrustedHost() != null) {
+                                                                if (webEngineConfig.getTrustedHost() != null
+                                                                        && webEngineConfig.getTrustedScheme() != null) {
                                                                     webView.loadUrl(
                                                                             webEngineConfig.getTrustedScheme()
                                                                                     + "://"
                                                                                     + webEngineConfig.getTrustedHost()
+                                                                                    + (webEngineConfig.getTrustedPort() > 0
+                                                                                    ? ":" + webEngineConfig.getTrustedPort()
+                                                                                    : "")
                                                                     );
                                                                 } else {
                                                                     webView.reload();
                                                                 }
-                                                            }, 300)
+                                                            }, 300L)
                                                     );
                                                 }
                                             }
@@ -243,481 +204,18 @@ public final class WebViewNavigationManager {
                     }
             );
         } catch (Throwable t) {
-            Log.w(TAG, "⚠️ CustomTabsService binding failed.", t);
+            Log.w(TAG, "CustomTabsService binding failed.", t);
         }
     }
 
-    public void addNavigationListener() {
-        if (webView == null) return;
-
-        if (WebViewFeature.isFeatureSupported(WebViewFeature.NAVIGATION_LISTENER)) {
-            WebViewCompat.addNavigationListener(
-                    webView,
-                    new NavigationListener() {
-                        @Override
-                        public void onFirstContentfulPaintMillis(
-                                @NonNull Page page,
-                                long durationMillis
-                        ) {
-                            Log.i("Performance", "🎯 FCP: " + durationMillis + "ms");
-                            RoyalPanopticon.recordMetric("FCP", durationMillis);
-                        }
-
-                        @Override
-                        public void onPageDomContentLoadedEvent(@NonNull Page page) {
-                            Log.i("Performance", "📄 DOMContentLoaded");
-                        }
-
-                        @Override
-                        public void onPageLoadEvent(@NonNull Page page) {
-                            Log.i("Performance", "📦 Load event fired");
-                        }
-
-                        @Override
-                        public void onNavigationStarted(@NonNull Navigation navigation) {
-                            if (speculativeEngine != null) {
-                                speculativeEngine.onNavigationStarted();
-                            }
-                            Log.i("Performance", "🚀 Navigation started");
-                        }
-
-                        @Override
-                        public void onNavigationRedirected(@NonNull Navigation navigation) {
-                            Log.i("Performance", "↪️ Navigation redirected");
-                        }
-
-                        @Override
-                        public void onNavigationCompleted(@NonNull Navigation navigation) {
-                            Log.i("Performance", "✅ Navigation completed");
-                        }
-
-                        @Override
-                        public void onPageDeleted(@NonNull Page page) {
-                            Log.i("Performance", "🗑️ Page evicted");
-                        }
-
-                        @Override
-                        public void onLargestContentfulPaintMillis(
-                                @NonNull Page page,
-                                long durationMillis
-                        ) {
-                            Log.i("Performance", "🏆 LCP: " + durationMillis + "ms");
-                            RoyalPanopticon.recordMetric("LCP", durationMillis);
-                        }
-
-                        @Override
-                        public void onPerformanceMarkMillis(
-                                @NonNull Page page,
-                                @NonNull String markName,
-                                long markTimeMillis
-                        ) {
-                            Log.i(
-                                    "Performance",
-                                    "📊 Performance mark: "
-                                            + markName
-                                            + " at "
-                                            + markTimeMillis
-                                            + "ms"
-                            );
-                        }
-                    }
-            );
-
-            Log.i(
-                    "RoyalEngine",
-                    "📊 NavigationListener added for performance metrics."
-            );
-        }
-    }
-
-    public void attachWebViewClient() {
-        if (webView == null) return;
-
-        webView.setWebViewClient(new WebViewClient() {
-
-            @Override
-            public void onPageStarted(
-                    WebView view,
-                    String url,
-                    android.graphics.Bitmap favicon
-            ) {
-                super.onPageStarted(view, url, favicon);
-                RoyalPanopticon.recordRequestSent();
-                SystemUI.beginPageNavigation(activity, view, url);
-            }
-
-            @Override
-            public void onPageFinished(WebView view, String url) {
-                if (view != null) {
-                    view.evaluateJavascript(OAUTH_AUTO_INJECTOR_JS, null);
-                    injectImeVisualViewportLayer(view);
-                }
-
-                try {
-                    CookieManager cookieManager = CookieManager.getInstance();
-                    cookieManager.flush();
-                    Log.i(
-                            TAG,
-                            "💾 Session Permanent Disk Flush Completed for: " + url
-                    );
-                } catch (Exception e) {
-                    Log.w(TAG, "⚠️ Cookie flush failed", e);
-                }
-
-                RoyalPanopticon.recordNavigationComplete();
-                RoyalNetworkEngine.notifyRenderIdle();
-
-                if (url == null
-                        || url.startsWith("data:")
-                        || url.startsWith("about:")
-                        || url.contains("chromewebdata")) {
-
-                    OfflineStateManager.getInstance().setPageValid(false);
-                    Log.w(TAG, "⚠️ Invalid/error page finished: " + url);
-                    return;
-                }
-
-                if (OfflineStateManager.getInstance().isOnErrorPage()) {
-                    Log.w(
-                            TAG,
-                            "⚠️ Ignoring onPageFinished because page is marked as error."
-                    );
-                    return;
-                }
-
-                OfflineStateManager.getInstance().setPageValid(true);
-                Log.i(TAG, "✅ Page finished successfully. Page is valid.");
-
-                if (activity instanceof MainActivity) {
-                    ((MainActivity) activity).notifyPageFinishedForSplash(view);
-                }
-            }
-
-            @Override
-            public void onPageCommitVisible(WebView view, String url) {
-                if (url != null
-                        && !url.startsWith("data:")
-                        && !url.startsWith("about:")
-                        && !url.contains("chromewebdata")) {
-
-                    Log.i(TAG, "✅ Page committed successfully: " + url);
-
-                    if (webEngineConfig.getTrustedHost() == null) {
-                        webEngineConfig.setTrustedOrigin(url);
-                    }
-
-                    if (webEngineConfig.getTrustedHost() != null
-                            && webEngineConfig.getTrustedScheme() != null) {
-
-                        speculativeEngine.setTrustedOrigin(
-                                webEngineConfig.getTrustedScheme(),
-                                webEngineConfig.getTrustedHost(),
-                                webEngineConfig.getTrustedPort()
-                        );
-                    }
-
-                    if (activity != null) {
-                        activity.runOnUiThread(() ->
-                                WebEnhancer.apply(view, context)
-                        );
-                    }
-
-                    RoyalNetworkEngine.notifyRenderStart();
-
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M
-                            && WebViewFeature.isFeatureSupported(
-                                    WebViewFeature.VISUAL_STATE_CALLBACK
-                            )) {
-
-                        final String committedUrl = url;
-
-                        WebViewCompat.postVisualStateCallback(
-                                view,
-                                System.nanoTime(),
-                                requestId -> view.postDelayed(
-                                        () -> {
-                                            if (activity == null
-                                                    || activity.isFinishing()
-                                                    || view.getVisibility() != View.VISIBLE) {
-                                                return;
-                                            }
-
-                                            if (committedUrl.equals(view.getUrl())) {
-                                                webEngineConfig.syncStatusBarColor(view);
-                                            }
-                                        },
-                                        180L
-                                )
-                        );
-
-                    } else {
-                        final String committedUrl = url;
-
-                        view.postDelayed(
-                                () -> {
-                                    if (activity == null
-                                            || activity.isFinishing()
-                                            || view.getVisibility() != View.VISIBLE) {
-                                        return;
-                                    }
-
-                                    if (committedUrl.equals(view.getUrl())) {
-                                        webEngineConfig.syncStatusBarColor(view);
-                                    }
-                                },
-                                220L
-                        );
-                    }
-
-                    if (NetworkMonitor.isInternetAvailable(context)
-                            && !OfflineStateManager.getInstance().isOnErrorPage()
-                            && OfflineStateManager.getInstance().isPageValid()) {
-
-                        OfflineStateManager.getInstance().notifyPageReadyToHide();
-                    }
-
-                } else {
-                    Log.w(TAG, "⚠️ Invalid page committed: " + url);
-                }
-            }
-
-            @Override
-            public boolean onRenderProcessGone(
-                    WebView view,
-                    RenderProcessGoneDetail detail
-            ) {
-                Log.e(
-                        TAG,
-                        detail.didCrash()
-                                ? "☠️ Chromium Renderer crashed."
-                                : "⚠️ Chromium Renderer killed by system."
-                );
-
-                RoyalNetworkEngine.notifyRenderIdle();
-                RoyalWebViewHost.destroy();
-
-                if (activity != null && !activity.isFinishing()) {
-                    activity.recreate();
-                }
-
-                return true;
-            }
-
-            @Override
-            public void onReceivedError(
-                    WebView view,
-                    WebResourceRequest request,
-                    WebResourceError error
-            ) {
-                if (request != null && request.isForMainFrame()) {
-                    OfflineStateManager.getInstance().setErrorPage(
-                            true,
-                            request.getUrl().toString()
-                    );
-
-                    Log.w(
-                            TAG,
-                            "🛡️ Main frame error detected. Native offline state activated."
-                    );
-                }
-            }
-
-            @SuppressWarnings("deprecation")
-            @Override
-            public void onReceivedError(
-                    WebView view,
-                    int errorCode,
-                    String description,
-                    String failingUrl
-            ) {
-                OfflineStateManager.getInstance().setErrorPage(true, failingUrl);
-                Log.w(TAG, "🛡️ Legacy main frame error detected. Page invalid.");
-            }
-
-            @Override
-            public WebResourceResponse shouldInterceptRequest(
-                    WebView view,
-                    WebResourceRequest request
-            ) {
-                if (request == null || request.getUrl() == null) return null;
-
-                String url = request.getUrl().toString();
-
-                if (url.contains("gorgias")
-                        || url.contains("facebook.net")
-                        || url.contains("analytics")
-                        || url.contains("klaviyo")) {
-
-                    String stubScript =
-                            "/* Isolated by Nexus Script Shield to ensure 60FPS Performance */";
-
-                    InputStream stubStream = new ByteArrayInputStream(
-                            stubScript.getBytes()
-                    );
-
-                    Log.d(
-                            "RoyalEngine",
-                            "🛡️ Shield: Isolated Parasitic Script -> " + url
-                    );
-
-                    return new WebResourceResponse(
-                            "application/javascript",
-                            "UTF-8",
-                            stubStream
-                    );
-                }
-
-                if (url.endsWith("/nexus-service-worker.js")) {
-                    try {
-                        InputStream swStream = context.getAssets().open(
-                                "public/js/nexus-service-worker.js"
-                        );
-
-                        Map<String, String> headers = new HashMap<>();
-                        headers.put("Content-Type", "application/javascript");
-                        headers.put("Service-Worker-Allowed", "/");
-                        headers.put("Cache-Control", "no-cache");
-
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                            return new WebResourceResponse(
-                                    "application/javascript",
-                                    "UTF-8",
-                                    200,
-                                    "OK",
-                                    headers,
-                                    swStream
-                            );
-                        } else {
-                            return new WebResourceResponse(
-                                    "application/javascript",
-                                    "UTF-8",
-                                    swStream
-                            );
-                        }
-
-                    } catch (Exception e) {
-                        Log.e(
-                                "RoyalEngine",
-                                "Failed to serve local Service Worker",
-                                e
-                        );
-                    }
-                }
-
-                if (!NetworkMonitor.isInternetAvailable(context)
-                        && request.isForMainFrame()) {
-
-                    Uri reqUri = request.getUrl();
-
-                    if (isSensitiveNavigation(reqUri)
-                            || OfflineStateManager.getInstance().isPageValid()) {
-
-                        Log.i(
-                                TAG,
-                                "📴 Offline main-frame request blocked safely. Shaking bar without page clear."
-                        );
-
-                        OfflineStateManager.getInstance().notifyOfflineClickAttempt();
-
-                        InputStream emptyStream = new ByteArrayInputStream(
-                                new byte[0]
-                        );
-
-                        return new WebResourceResponse(
-                                "text/plain",
-                                "UTF-8",
-                                204,
-                                "No Content",
-                                null,
-                                emptyStream
-                        );
-                    }
-
-                    Log.i(
-                            TAG,
-                            "📴 Offline main-frame error request intercepted. Triggering Native Offline UI."
-                    );
-
-                    OfflineStateManager.getInstance().setErrorPage(
-                            true,
-                            reqUri.toString()
-                    );
-
-                    String cleanStub =
-                            "<!DOCTYPE html><html><head><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"></head><body style=\"background-color:transparent;\"></body></html>";
-
-                    InputStream stubStream = new ByteArrayInputStream(
-                            cleanStub.getBytes(StandardCharsets.UTF_8)
-                    );
-
-                    return new WebResourceResponse(
-                            "text/html",
-                            "UTF-8",
-                            200,
-                            "OK",
-                            null,
-                            stubStream
-                    );
-                }
-
-                WebResourceResponse royalResponse =
-                        RoyalNetworkEngine.interceptRequest(request);
-
-                if (royalResponse != null) return royalResponse;
-
-                return null;
-            }
-
-            @Override
-            public boolean shouldOverrideUrlLoading(
-                    WebView view,
-                    WebResourceRequest request
-            ) {
-                if (request == null || request.getUrl() == null) return false;
-
-                Uri uri = request.getUrl();
-
-                if (!NetworkMonitor.isInternetAvailable(context)) {
-                    OfflineStateManager.getInstance().notifyOfflineClickAttempt();
-                    return true;
-                }
-
-                return handleUriLogic(uri, request.isForMainFrame());
-            }
-
-            @SuppressWarnings("deprecation")
-            @Override
-            public boolean shouldOverrideUrlLoading(WebView view, String url) {
-                if (url == null) return false;
-
-                Uri uri = Uri.parse(url);
-
-                if (!NetworkMonitor.isInternetAvailable(context)) {
-                    OfflineStateManager.getInstance().notifyOfflineClickAttempt();
-                    return true;
-                }
-
-                return handleUriLogic(uri, true);
-            }
-        });
-    }
-
-    private void injectImeVisualViewportLayer(WebView view) {
-        if (view == null) return;
-        view.evaluateJavascript(IME_VISUAL_VIEWPORT_JS, null);
-    }
-
-    private boolean isSensitiveNavigation(Uri uri) {
+    public boolean isSensitiveNavigation(Uri uri) {
         if (uri == null) return false;
 
         String scheme = uri.getScheme();
         if (scheme == null) return false;
 
         scheme = scheme.toLowerCase(Locale.ROOT);
-
-        if (!"https".equals(scheme) && !"http".equals(scheme)) {
-            return false;
-        }
+        if (!"https".equals(scheme) && !"http".equals(scheme)) return false;
 
         String host = uri.getHost();
         if (host == null) return false;
@@ -737,37 +235,40 @@ public final class WebViewNavigationManager {
     private boolean isLogoutUrl(Uri uri) {
         if (uri == null) return false;
 
-        String urlStr = uri.toString().toLowerCase(Locale.ROOT);
+        String url = uri.toString().toLowerCase(Locale.ROOT);
 
-        return urlStr.contains("/logout")
-                || urlStr.contains("/signout")
-                || urlStr.contains("/sign-out")
-                || urlStr.contains("/log-out")
-                || urlStr.contains("action=logout");
+        return url.contains("/logout")
+                || url.contains("/signout")
+                || url.contains("/sign-out")
+                || url.contains("/log-out")
+                || url.contains("action=logout");
     }
 
     public void clearNativeSession(Runnable onComplete) {
-        if (activity == null) return;
+        if (activity == null) {
+            if (onComplete != null) onComplete.run();
+            return;
+        }
 
         activity.runOnUiThread(() -> {
             try {
                 CookieManager cookieManager = CookieManager.getInstance();
 
-                cookieManager.removeSessionCookies(null);
+                cookieManager.removeSessionCookies(ignored -> {
+                    cookieManager.removeAllCookies(success -> {
+                        cookieManager.flush();
 
-                cookieManager.removeAllCookies(success -> {
-                    cookieManager.flush();
+                        Log.i(
+                                TAG,
+                                "Native session cookies cleared."
+                        );
 
-                    Log.i(
-                            TAG,
-                            "🧹 Native Session & Cookies Completely Purged from Disk Storage."
-                    );
-
-                    if (onComplete != null) onComplete.run();
+                        if (onComplete != null) onComplete.run();
+                    });
                 });
 
             } catch (Exception e) {
-                Log.w(TAG, "⚠️ Failed to clear native session", e);
+                Log.w(TAG, "Failed to clear native session.", e);
                 if (onComplete != null) onComplete.run();
             }
         });
@@ -781,17 +282,15 @@ public final class WebViewNavigationManager {
 
             Log.w(
                     TAG,
-                    "📴 Offline Mode Active -> Blocked OAuth Custom Tab launch for: " + uri
+                    "Offline mode; blocked OAuth Custom Tab launch: " + uri
             );
 
-            return false;
+            return true;
         }
 
         try {
-            isCustomTabOpen = true;
-
             CustomTabsIntent.Builder builder =
-                    (customTabsSession != null)
+                    customTabsSession != null
                             ? new CustomTabsIntent.Builder(customTabsSession)
                             : new CustomTabsIntent.Builder();
 
@@ -807,13 +306,12 @@ public final class WebViewNavigationManager {
                 int screenHeight = activity.getResources()
                         .getDisplayMetrics().heightPixels;
 
-                int initialHeight = (int) (screenHeight * 0.88);
-
                 builder.setInitialActivityHeightPx(
-                        initialHeight,
+                        (int) (screenHeight * 0.88f),
                         CustomTabsIntent.ACTIVITY_HEIGHT_DEFAULT
                 );
             } catch (Throwable ignored) {
+                // Keep default Custom Tab height if the API is unavailable.
             }
 
             builder.setStartAnimations(
@@ -831,21 +329,15 @@ public final class WebViewNavigationManager {
             builder.setShowTitle(true);
             builder.setShareState(CustomTabsIntent.SHARE_STATE_OFF);
 
-            CustomTabsIntent customTabsIntent = builder.build();
-            customTabsIntent.launchUrl(activity, uri);
+            isCustomTabOpen = true;
+            builder.build().launchUrl(activity, uri);
 
-            Log.i(
-                    TAG,
-                    "🔐 Sensitive navigation launched as In-App Bottom Sheet: " + uri
-            );
-
+            Log.i(TAG, "Sensitive navigation opened in Custom Tab: " + uri);
             return true;
 
         } catch (Throwable e) {
             isCustomTabOpen = false;
-
-            Log.e(TAG, "❌ Failed to launch sensitive navigation.", e);
-
+            Log.e(TAG, "Failed to launch sensitive navigation.", e);
             return false;
         }
     }
@@ -856,54 +348,53 @@ public final class WebViewNavigationManager {
         isCustomTabOpen = false;
 
         activity.runOnUiThread(() -> {
-            Log.i(
-                    TAG,
-                    "👑 Auth Return Executing in WebView -> " + redirectUrl
-            );
+            Log.i(TAG, "Auth return received: " + redirectUrl);
 
             if (redirectUrl != null && !redirectUrl.isEmpty()) {
                 if (redirectUrl.startsWith("com.store.app.auth")) {
-                    Log.i(
-                            TAG,
-                            "ℹ️ Custom scheme unhandled, reloading home origin instead."
-                    );
-
-                    if (webEngineConfig.getTrustedHost() != null) {
-                        webView.loadUrl(
-                                webEngineConfig.getTrustedScheme()
-                                        + "://"
-                                        + webEngineConfig.getTrustedHost()
-                        );
-                    } else {
-                        webView.reload();
-                    }
-
+                    reloadTrustedOrigin();
                     return;
                 }
 
-                webView.loadUrl(redirectUrl);
-
-                try {
-                    CookieManager.getInstance().flush();
-                    Log.i(TAG, "💾 CookieManager flushed successfully.");
-                } catch (Exception e) {
-                    Log.w(TAG, "Failed to flush CookieManager", e);
+                Uri redirectUri = Uri.parse(redirectUrl);
+                if (isHttpOrHttps(redirectUri)) {
+                    webView.loadUrl(redirectUrl);
+                } else {
+                    reloadTrustedOrigin();
+                    return;
                 }
 
-            } else if (webEngineConfig.getTrustedHost() != null) {
-                webView.loadUrl(
-                        webEngineConfig.getTrustedScheme()
-                                + "://"
-                                + webEngineConfig.getTrustedHost()
-                );
-
-                CookieManager.getInstance().flush();
-
-            } else {
-                webView.reload();
-                CookieManager.getInstance().flush();
+                flushCookiesSafely();
+                return;
             }
+
+            reloadTrustedOrigin();
+            flushCookiesSafely();
         });
+    }
+
+    private void reloadTrustedOrigin() {
+        if (webView == null) return;
+
+        String scheme = webEngineConfig.getTrustedScheme();
+        String host = webEngineConfig.getTrustedHost();
+        int port = webEngineConfig.getTrustedPort();
+
+        if (scheme != null && host != null) {
+            String url = scheme + "://" + host
+                    + (port > 0 ? ":" + port : "");
+            webView.loadUrl(url);
+        } else {
+            webView.reload();
+        }
+    }
+
+    private void flushCookiesSafely() {
+        try {
+            CookieManager.getInstance().flush();
+        } catch (Exception e) {
+            Log.w(TAG, "Cookie flush failed.", e);
+        }
     }
 
     private boolean launchExternalWebUrl(Uri uri) {
@@ -911,32 +402,26 @@ public final class WebViewNavigationManager {
 
         try {
             CustomTabsIntent.Builder builder =
-                    (customTabsSession != null)
+                    customTabsSession != null
                             ? new CustomTabsIntent.Builder(customTabsSession)
                             : new CustomTabsIntent.Builder();
 
             builder.setShowTitle(true);
             builder.setShareState(CustomTabsIntent.SHARE_STATE_OFF);
+            builder.build().launchUrl(activity, uri);
 
-            CustomTabsIntent customTabsIntent = builder.build();
-            customTabsIntent.launchUrl(activity, uri);
-
-            Log.i(TAG, "🌐 External HTTP/HTTPS opened in Custom Tab: " + uri);
-
+            Log.i(TAG, "External HTTP/HTTPS opened in Custom Tab: " + uri);
             return true;
 
         } catch (Throwable e) {
-            Log.e(
-                    TAG,
-                    "❌ Failed to open external URL in Custom Tab: " + uri,
-                    e
-            );
-
+            Log.e(TAG, "Failed to open external URL in Custom Tab: " + uri, e);
             return launchExternal(uri);
         }
     }
 
     private boolean launchExternal(Uri uri) {
+        if (uri == null) return true;
+
         try {
             Intent intent = new Intent(Intent.ACTION_VIEW, uri);
             intent.addCategory(Intent.CATEGORY_BROWSABLE);
@@ -946,11 +431,11 @@ public final class WebViewNavigationManager {
                 applyNativeExitTransition();
                 context.startActivity(intent);
             } else {
-                Log.w("RoyalEngine", "No Activity found for: " + uri);
+                Log.w(TAG, "No Activity found for: " + uri);
             }
 
         } catch (Exception e) {
-            Log.e("RoyalEngine", "External launch failed", e);
+            Log.e(TAG, "External launch failed.", e);
         }
 
         return true;
@@ -986,11 +471,10 @@ public final class WebViewNavigationManager {
             if (fallbackUrl != null && !fallbackUrl.trim().isEmpty()) {
                 Uri fallbackUri = Uri.parse(fallbackUrl);
 
-                if ("https".equalsIgnoreCase(fallbackUri.getScheme())) {
+                if (isHttpOrHttps(fallbackUri)) {
                     new CustomTabsIntent.Builder()
                             .build()
                             .launchUrl(activity, fallbackUri);
-
                     return true;
                 }
             }
@@ -1020,11 +504,14 @@ public final class WebViewNavigationManager {
         if (uri == null || uri.getScheme() == null) return false;
 
         String scheme = uri.getScheme().toLowerCase(Locale.ROOT);
-
         return "http".equals(scheme) || "https".equals(scheme);
     }
 
-    private boolean handleUriLogic(Uri uri, boolean isMainFrame) {
+    /**
+     * Called by WebEngineManager's WebViewClient.
+     * Returns true when the navigation has been handled externally or blocked.
+     */
+    public boolean handleUriLogic(Uri uri, boolean isMainFrame) {
         if (uri == null) return true;
 
         if (!NetworkMonitor.isInternetAvailable(context)) {
@@ -1032,27 +519,20 @@ public final class WebViewNavigationManager {
             return true;
         }
 
-        String scheme = uri.getScheme() != null
-                ? uri.getScheme().toLowerCase(Locale.ROOT)
-                : null;
+        String scheme = uri.getScheme() == null
+                ? null
+                : uri.getScheme().toLowerCase(Locale.ROOT);
 
         if (scheme == null) return true;
 
-        /*
-         * OAuth keeps its dedicated Custom Tab flow.
-         */
         if (isSensitiveNavigation(uri)) {
             return launchSensitiveFlow(uri);
         }
 
-        /*
-         * Payment/application schemes never load in the normal WebView.
-         */
         if (isPaymentExternalScheme(scheme)) {
             if ("intent".equals(scheme)) {
                 return launchIntentScheme(uri);
             }
-
             return launchExternal(uri);
         }
 
@@ -1060,29 +540,17 @@ public final class WebViewNavigationManager {
             return true;
         }
 
-        /*
-         * Non-HTTP schemes are external.
-         */
         if (!"http".equals(scheme) && !"https".equals(scheme)) {
             return launchExternal(uri);
         }
 
-        /*
-         * Keep only the exact configured CLIENT_URL origin inside
-         * the application WebView.
-         */
         if (webEngineConfig.isSameOrigin(uri)) {
             if (isLogoutUrl(uri)) {
                 clearNativeSession(null);
             }
-
             return false;
         }
 
-        /*
-         * Every different HTTP/HTTPS origin goes to Custom Tabs.
-         */
         return launchExternalWebUrl(uri);
     }
-}
-
+    }
