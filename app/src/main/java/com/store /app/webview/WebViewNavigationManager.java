@@ -285,7 +285,7 @@ public final class WebViewNavigationManager {
                     "Offline mode; blocked OAuth Custom Tab launch: " + uri
             );
 
-            return true;
+            return false;
         }
 
         try {
@@ -348,7 +348,7 @@ public final class WebViewNavigationManager {
         isCustomTabOpen = false;
 
         activity.runOnUiThread(() -> {
-            Log.i(TAG, "Auth return received: " + redirectUrl);
+            Log.i(TAG, "Auth Return Executing in WebView -> " + redirectUrl);
 
             if (redirectUrl != null && !redirectUrl.isEmpty()) {
                 if (redirectUrl.startsWith("com.store.app.auth")) {
@@ -356,20 +356,13 @@ public final class WebViewNavigationManager {
                     return;
                 }
 
-                Uri redirectUri = Uri.parse(redirectUrl);
-                if (isHttpOrHttps(redirectUri)) {
-                    webView.loadUrl(redirectUrl);
-                } else {
-                    reloadTrustedOrigin();
-                    return;
-                }
-
+                webView.loadUrl(redirectUrl);
                 flushCookiesSafely();
-                return;
-            }
 
-            reloadTrustedOrigin();
-            flushCookiesSafely();
+            } else {
+                reloadTrustedOrigin();
+                flushCookiesSafely();
+            }
         });
     }
 
@@ -553,4 +546,4 @@ public final class WebViewNavigationManager {
 
         return launchExternalWebUrl(uri);
     }
-    }
+                                                }
