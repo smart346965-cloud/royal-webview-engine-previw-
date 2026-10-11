@@ -175,4 +175,4 @@ public final class RoyalAuthManager {
             Log.i(TAG, "🧹 RoyalAuthManager destroyed safely");
         }
     }
-                        }
+    }
