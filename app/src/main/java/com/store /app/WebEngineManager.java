@@ -20,6 +20,7 @@ import androidx.webkit.NavigationListener;
 import androidx.webkit.Page;
 import androidx.webkit.WebViewCompat;
 import androidx.webkit.WebViewFeature;
+import androidx.webkit.RenderProcessGoneDetail;
 
 import com.store.app.offline.OfflineStateManager;
 import com.store.app.webview.SpeculativeEngine;
