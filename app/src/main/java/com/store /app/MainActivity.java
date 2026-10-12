@@ -741,18 +741,15 @@ public class MainActivity extends AppCompatActivity {
 
     public void dispatchAuthUrlToWebView(@NonNull String url) {
         runOnUiThread(() -> {
-            Intent intent = new Intent(this, MainActivity.class);
-            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-            startActivity(intent);
+            Log.i(TAG, "🚀 Delivering resolved auth/handoff URL to engine: " + url);
 
             if (engineManager != null) {
                 engineManager.handleAuthReturn(url);
             } else if (activeWebView != null) {
-                Log.i(TAG, "🚀 Dispatching OAuth Callback URL directly to WebView: " + url);
                 activeWebView.loadUrl(url);
                 android.webkit.CookieManager.getInstance().flush();
             } else {
-                Log.w(TAG, "⚠️ activeWebView and engineManager are null.");
+                Log.w(TAG, "⚠️ Both activeWebView and engineManager are null during dispatch.");
             }
         });
     }
@@ -845,4 +842,4 @@ public class MainActivity extends AppCompatActivity {
             Log.e(TAG, "⚠️ Failed to initialize Native Modules.", t);
         }
     }
-                            }
+                                        }
