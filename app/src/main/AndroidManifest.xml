@@ -70,31 +70,27 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
 
-            <!-- 👑 [Nexus Universal App Link & OAuth Interceptor]: استقبال روابط HTTPS والسكيم المخصص -->
-            <intent-filter android:autoVerify="true">
-                <action android:name="android.intent.action.VIEW" />
-
-                <category android:name="android.intent.category.DEFAULT" />
-                <category android:name="android.intent.category.BROWSABLE" />
-
-                <data android:scheme="https" />
-                <data android:scheme="http" />
-                <data android:host="*" />
-                <data android:pathPrefix="/auth" />
-                <data android:pathPrefix="/oauth" />
-                <data android:pathPrefix="/callback" />
-                <data android:pathPrefix="/login" />
-            </intent-filter>
-
+            <!-- 👑 [Royal Universal Auth Interceptor]: التقاط المخطط المخصص لجميع مسارات العودة والتسليم -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
 
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE" />
 
-                <data
-                    android:scheme="com.store.app.auth"
-                    android:host="callback" />
+                <!-- يدعم com.store.app.auth://callback أو com.store.app.auth://handoff أو com.store.app.auth://auth -->
+                <data android:scheme="com.store.app.auth" />
+            </intent-filter>
+
+            <!-- استقبال روابط HTTPS لمسارات العودة بدون فرض autoVerify المعطل -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <data android:scheme="https" />
+                <data android:pathPrefix="/royal-callback" />
+                <data android:pathPrefix="/auth/callback" />
             </intent-filter>
 
         </activity>
